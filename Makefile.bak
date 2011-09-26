@@ -1,0 +1,23 @@
+#glBNES Makefile
+
+LINKER=gcc
+LINKER-FLAGS=-L/opt/local/lib -lSDLmain -lSDL -Wl,-framework,Cocoa
+CFLAGS=-I/opt/local/include/SDL -D_GNU_SOURCE=1 -D_THREAD_SAFE
+
+
+bnes: main.o APU.o B6502.o PPU.o config.o mapper.o pad.o 
+	cc -o main.o APU.o B6502.o config.o mapper.o pad.o
+# DO NOT DELETE
+
+pad.o: /usr/include/stdio.h /usr/include/_types.h /usr/include/sys/_types.h
+pad.o: /usr/include/sys/cdefs.h /usr/include/machine/_types.h
+pad.o: /usr/include/i386/_types.h /usr/include/stdlib.h
+pad.o: /usr/include/available.h /usr/include/sys/wait.h
+pad.o: /usr/include/sys/signal.h /usr/include/sys/appleapiopts.h
+pad.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
+pad.o: /usr/include/i386/_structs.h /usr/include/sys/_structs.h
+pad.o: /usr/include/machine/_structs.h /usr/include/sys/resource.h
+pad.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
+pad.o: /usr/include/sys/_endian.h /usr/include/libkern/_OSByteOrder.h
+pad.o: /usr/include/libkern/i386/_OSByteOrder.h /usr/include/alloca.h
+pad.o: /usr/include/machine/types.h /usr/include/i386/types.h main.h
