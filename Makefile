@@ -1,13 +1,21 @@
-:#glBNES Makefile
-LINKER=gcc
+#glBNES Makefile
+CC=clang
+#LINKER=gcc
 #LDFLAGS=$(shell sdl-config --libs) -arch i386 -g -framework GLUT -framework OpenGL -framework Foundation -lpthread -lncurses
 #CFLAGS=$(shell sdl-config --cflags) -arch i386 -std=c99 -s -Wall -O3 -fexpensive-optimizations 
                                                                 
-LDFLAGS=$(shell sdl-config --libs) -g -lpthread -lncurses
-CFLAGS=$(shell sdl-config --cflags)  -std=c99 -s -Wall -O3 -fexpensive-optimizations 
+LDFLAGS=$(shell sdl2-config --libs) -framework OpenGL -framework Foundation 
+CFLAGS=$(shell sdl2-config --cflags) -g -std=gnu11 -s -Wall# -O3 -fexpensive-optimizations 
+
+SOURCES=  main.o cart.o apu.o memory.o b6502.o ppu.o config.o mapper.o pad.o
+
                                       
-bnes: main.o APU.o B6502.o PPU.o config.o mapper.o pad.o
-	gcc $(LDFLAGS) -o bnes APU.o B6502.o PPU.o config.o mapper.o pad.o main.o
+bnes: $(SOURCES)
+	$(CC) $(LDFLAGS) -o bnes $(SOURCES)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
 # DO NOT DELETE
 
 APU.o: main.h

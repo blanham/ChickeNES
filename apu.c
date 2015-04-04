@@ -11,12 +11,12 @@
  #include "main.h"
  //might want to use Blargg's blipbuffer library
 #include "APU.h"
-#include "blip/blip.h"
+//#include "blip/blip.h"
 
 enum { sample_rate = 44100 };
-static const double clock_rate = (double) sample_rate * blip_max_ratio;
+//static const double clock_rate = (double) sample_rate * blip_max_ratio;
 
-static blip_buffer_t* blip;
+//static blip_buffer_t* blip;
 
  //APU registers
  //square 2

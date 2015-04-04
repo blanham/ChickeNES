@@ -384,7 +384,8 @@ void RunPPU(int cycles)
 						glTexCoord2d(0,1); glVertex2i(0, 240);
 					glEnd();
 					SDL_GL_SwapBuffers();
-					SDL_GL_SwapWindow(mainwindow);
+					//SDL_GL_SwapWindow(mainwindow);
+
 					//wait (slows down)
 					//	usleep(5000);
 					ppu.frames++;

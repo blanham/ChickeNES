@@ -4,22 +4,18 @@
  *  Created on: May 29, 2009
  *      Author: blanham
  */
-#ifdef __APPLE__
-#include <SDL/SDL.h>
-#include <SDL/SDL_opengl.h>
-#else
 #include <SDL.h>
-#include <SDL/SDL_opengl.h>
-#endif
+#include <SDL_opengl.h>
 #ifdef __APPLE__
 #include <OpenGL/gl.h>
 #else
 #include <GL/gl.h>
 #endif
 #include <stdint.h>
+#include <memory.h>
 
 SDL_Event g_Event;
-SDL_WindowID mainwindow;
+//SDL_WindowID mainwindow;
 
 extern SDL_Surface *surface;	// This surface will tell us the details of the image
 extern GLuint texture;			// This is a handle to our texture object
