@@ -261,21 +261,6 @@ void initPPU()
 	init_chr_buffer();
 }
 
-
-/* derp, move this */
-void nmi()
-{
-#ifdef PRNTSTAT
-	printf("\n\nNMI!\n\n");
-#endif
-	RAM[0x0100+STACK--]= (PC >> 8);
-	RAM[0x0100+STACK--]= (PC & 0xff);
-	RAM[0x0100+STACK--]= P;
-	PC = RAM[0xfffa] + (RAM[0xfffb]<<8);
-	RAM[0x2000] |= 0x80;
-	NMI=0;
-}
-
 inline unsigned char rdVRAM(WORD addr){
 
 	BYTE value= 0;
