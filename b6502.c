@@ -9,11 +9,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <stdint.h>
 #include "main.h"
-#include "B6502.h"
-
-#include "int2bin.h"
+#include "b6502.h"
 
 #ifdef DEBUG
 # define DPRINTF(...) do { fprintf(stderr, __VA_ARGS__);} while (0)
@@ -21,168 +18,185 @@
 # define DPRINTF(...) 
 #endif
 
-struct  cpu {
-	uint8_t a;
-	uint8_t x;
-	uint8_t y;
-
-	uint8_t sp;
-	uint16_t pc;
-	uint8_t flags;//Might decompose this into bools
-};
-
 //counting variable
-int i;
-int sum;
-//helper variables
-uint8_t helper = 0;
-uint8_t val = 0;
-//cycle counter
-int cycles = 0;
-//need to define flags
-// one variable processed with bitwise ops
-uint8_t P;
-//6502 Program counter, indicates current address
-uint16_t PC;
+int sum; //used in ADC/SBC
 //Program counter save variables
 //supersavepc is used when we have to juggle counters
 //should consider rewriting those functions that use it
 //but probably won't matter as the core is fast enough anyway
 uint16_t savepc, supersavepc;
-//for signed operations
+//helper variables
+uint8_t helper = 0;
+uint8_t val = 0;
+//cycle counter
+int cycles = 0;
+
+//for signed operations - (Because past Bryce didn't understand casting)
 int8_t pSigned;
 //some functions need to save P
 uint8_t saveP;
-//establish registers
-uint8_t A,X,Y=0;
-//beginning address of the Stack ($0100-$01FFF)
-uint8_t STACK = 0xFF;
 
-
-struct cpu *cpu_alloc()
+mos6502 *mos6502_alloc()
 {
-	struct cpu *ret = calloc(sizeof(*ret), 1);
+	mos6502 *ret = calloc(sizeof(*ret), 1);
+	RAM = calloc(65536, 1);
+	ret->sp = 0xFD;
+	ret->flags = 0x24;
+	ret->pc = 0xC000;
+	ret->ram = RAM;
 	return ret;
 }
 
 
-void cpu_reset(struct cpu *cpu)
+void cpu_reset(mos6502 *cpu)
 {
 
 }
+
+void printp(mos6502 *cpu)
+{
+    printf("P:");
+	//printf(cpu->flags & 0x80 ? "N" : "n");
+    if (cpu->flags & 0x80)printf("N");
+    else printf("n");
+    if (cpu->flags & 0x40)printf("V");
+    else printf("v");
+    if (cpu->flags & 0x20)printf("U");
+    else printf("u");
+    if (cpu->flags & 0x10)printf("B");
+    else printf("b");
+    if (cpu->flags & 0x08)printf("D");
+    else printf("d");
+    if (cpu->flags & 0x04)printf("I");
+    else printf("i");
+    if (cpu->flags & 0x02)printf("Z");
+    else printf("z");
+    if (cpu->flags & 0x01)printf("C");
+    else printf("c");
+}
+
+void nmi(mos6502 *cpu)
+{
+	DPRINTF("\n\nNMI!\n\n");
+	RAM[0x0100+cpu->sp--] = (cpu->pc >> 8);
+	RAM[0x0100+cpu->sp--] = (cpu->pc & 0xff);
+	RAM[0x0100+cpu->sp--] = cpu->flags;
+	cpu->pc = RAM[0xfffa] + (RAM[0xfffb]<<8);
+	RAM[0x2000] |= 0x80;
+	NMI=0;
+}
+
 
 void initCPU(void)
 {
 	//read sarting vector from 0x7ffd
-	PC = RAM[0xfffc] + (RAM[0xfffd]<<8);
-	printf("Starting execution at: %.4x\n", PC);
+//	cpu->pc = RAM[0xfffc] + (RAM[0xfffd]<<8);
+//	printf("Starting execution at: %.4x\n", cpu->pc);
 	//set CPU flags and registers clear
-	A=X=Y=P=0;
-	P |= 0x4;
+	
+//	A=X=Y=P=0;
+//	cpu->flags |= 0x4;
 }
 
 
 //would probably be better as a macro
-void chknegzero(uint8_t chk) {
-	if (chk & 0x80) P |= 0x80;
-	else P &= 0x7f;
+void chknegzero(mos6502 *cpu, uint8_t chk) {
+	if (chk & 0x80) cpu->flags |= 0x80;
+	else cpu->flags &= 0x7f;
 
-	if (chk == 0) P |= 0x02;
-	else P &= 0xfd;
+	if (chk == 0) cpu->flags |= 0x02;
+	else cpu->flags &= 0xfd;
 }
 
-char *printstats[2]={"hello, PC:%.4x","PC"};
-
-
-void pushstack() {
-	RAM[0x0100+STACK]=PC;
-	STACK--;
-	RAM[0x0100+STACK]=PC+1;
-	STACK--;
-	RAM[0x0100+STACK]=P;
-	STACK--;
+void pushstack(mos6502 *cpu) {
+	RAM[0x0100+cpu->sp] = cpu->pc;
+	cpu->sp--;
+	RAM[0x0100+cpu->sp] = cpu->pc+1;
+	cpu->sp--;
+	RAM[0x0100+cpu->sp] = cpu->flags;
+	cpu->sp--;
 }
 
 //Memory Read Functions
-void RdImd(void) {
-	DPRINTF("%.2x %.2x", RAM[PC], RAM[PC+1]);
-	val = RAM[PC+1];
+void RdImd(mos6502 *cpu) {
+	DPRINTF("%.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1]);
+	val = RAM[cpu->pc+1];
 	cycles = 2;
-	PC++;
+	cpu->pc++;
 }
 
-void RdAcc(void) {
-	DPRINTF("%.2x", RAM[PC]);
-	val = A;
+void RdAcc(mos6502 *cpu) {
+	DPRINTF("%.2X", RAM[cpu->pc]);
+	val = cpu->a;
 	cycles = 2;
 }
 
-void RdZp(void) {
-	DPRINTF("%.2x %.2x", RAM[PC], RAM[PC+1]);
-	savepc = RAM[PC+1];
+void RdZp(mos6502 *cpu) {
+	DPRINTF("%.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1]);
+	savepc = RAM[cpu->pc+1];
 	val = RAM[savepc];
 	cycles = 3;
-	PC++;
+	cpu->pc++;
 }
 
-void RdZpX(void) {
-	DPRINTF("%.2x %.2x", RAM[PC], RAM[PC+1]);
-	savepc = RAM[PC+1]+X;
+void RdZpX(mos6502 *cpu) {
+	DPRINTF("%.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1]);
+	savepc = RAM[cpu->pc+1] + cpu->x;
 	savepc &= 0x00ff;
 	val = RAM[savepc];
-	PC++;
+	cpu->pc++;
 	cycles = 4;
 }
 
-void RdZpY(void) {
-	DPRINTF("%.2x %.2x", RAM[PC], RAM[PC+1]);
-	savepc = RAM[PC+1]+Y;
+void RdZpY(mos6502 *cpu) {
+	DPRINTF("%.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1]);
+	savepc = RAM[cpu->pc+1] + cpu->y;
 	savepc &= 0x00ff;
 	val = RAM[savepc];
-	PC++;
+	cpu->pc++;
 	cycles = 4;
 }
 
-void RdAbs(void) {
-	DPRINTF("%.2x %.2x %.2x", RAM[PC], RAM[PC+1], RAM[PC+2]);
-	savepc = RAM[PC+1] + (RAM[PC+1+1]<<8);
-	val = ReadRAM(savepc);
-	PC += 2;
+void RdAbs(mos6502 *cpu) {
+	DPRINTF("%.2X %.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
+	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc+1+1]<<8);
+ 	val = ReadRAM(savepc);
+	cpu->pc += 2;
 	cycles = 4;
 }
 
-void RdAbsX(void) {
-	DPRINTF("%.2x %.2x %.2x", RAM[PC], RAM[PC+1], RAM[PC+2]);
-	savepc = RAM[PC+1] + (RAM[PC+1+1]<<8);
-	PC += 2;
+void RdAbsX(mos6502 *cpu) {
+	DPRINTF("%.2X %.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
+	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc+1+1]<<8);
+	cpu->pc += 2;
 	cycles = 4;
-	if ((savepc>>8) != ((savepc+X)>>8)) {
+	if ((savepc>>8) != ((savepc + cpu->x)>>8)) {
 		cycles++;
 	}
-	savepc +=X;
+	savepc += cpu->x;
 	val = ReadRAM(savepc);
 }
 
-void RdAbsY(void) {
-	DPRINTF("%.2x %.2x %.2x", RAM[PC], RAM[PC+1], RAM[PC+2]);
-	savepc = RAM[PC+1] + (RAM[PC+1+1]<<8);
-	PC += 2;
+void RdAbsY(mos6502 *cpu) {
+	DPRINTF("%.2X %.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
+	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc+1+1]<<8);
+	cpu->pc += 2;
 	cycles = 4;
-	if ((savepc>>8) != ((savepc+Y)>>8))
+	if ((savepc>>8) != ((savepc + cpu->y)>>8))
 		cycles++;
-	savepc +=Y;
+	savepc +=cpu->y;
 	val = ReadRAM(savepc);
 }
 
-void RdInd(void) {
-	DPRINTF("%.2x %.2x %.2x \tJMP", RAM[PC], RAM[PC+1], RAM[PC+2]);
-	DPRINTF(" $(%.2x%.2x)", RAM[PC+2], RAM[PC+1]);
+void RdInd(mos6502 *cpu) {
+	DPRINTF("%.2X %.2X %.2X \tJMP", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
+	DPRINTF(" $(%.2X%.2X)", RAM[cpu->pc+2], RAM[cpu->pc+1]);
 
-	/*  savepc = RAM[PC+1] + (RAM[PC+2] << 8);
+	/*  savepc = RAM[cpu->pc+1] + (RAM[cpu->pc+2] << 8);
 
 		helper = RAM[savepc];
 
-		if (RAM[PC+1]==0xFF){
+		if (RAM[cpu->pc+1]==0xFF){
 		DPRINTF("%.4X",savepc);
 		savepc -= 0xFF;
 		helper = helper + (RAM[savepc+1] << 8);
@@ -190,9 +204,9 @@ void RdInd(void) {
 		}
 		else {helper = helper + (RAM[savepc+1] << 8); }
 		*/
-	savepc = RAM[PC+1] + (RAM[PC+2] << 8);
+	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc+2] << 8);
 	supersavepc = RAM[savepc];
-	if(RAM[PC+1]==0xFF){
+	if(RAM[cpu->pc+1]==0xFF){
 		savepc &= 0xFF00;
 		savepc -= 1;
 	}
@@ -204,1076 +218,1129 @@ void RdInd(void) {
 	cycles = 5;
 }
 
-void RdIndX(void) {
-	DPRINTF("%.2x %.2x", RAM[PC], RAM[PC+1]);
+void RdIndX(mos6502 *cpu) {
+	DPRINTF("%.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1]);
 
-	val = RAM[PC+1]+X;
+	val = RAM[cpu->pc+1] + cpu->x;
 
 	savepc = RAM[val];
 	savepc |= (RAM[++val] << 8);
 
 	val = RAM[savepc];
-	PC++;
+	cpu->pc++;
 	cycles = 6;
 }
 
-void RdIndY(void) {
-	DPRINTF("%.2x %.2x", RAM[PC], RAM[PC+1]);
+void RdIndY(mos6502 *cpu) {
+	DPRINTF("%.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1]);
 
 	cycles = 5;
-	val = RAM[PC+1];
+	val = RAM[cpu->pc+1];
 	savepc = RAM[val];
 
 	savepc |= (RAM[++val] << 8);
-	savepc +=Y;
+	savepc +=cpu->y;
 
 	val = RAM[savepc];
-	PC++;
+	cpu->pc++;
 }
 
 //Memory Write Functions, needs cycles added
 
-void WrAcc(void) {
-	DPRINTF("\n");
-	A=val;
+void WrAcc(mos6502 *cpu) {
+	DPRINTF("");
+	cpu->a=val;
 }
 
-void WrZp(void) {
-	DPRINTF(" $%.2x = #$%.2X\n", savepc, val);
+void WrZp(mos6502 *cpu) {
+	DPRINTF(" $%.2X = #$%.2X", savepc, val);
 	RAM[savepc] = val;
-	PC++;
+	cpu->pc++;
 }
 
-void WrZpX(void) {
-	DPRINTF(" $%.2X = #$%.2X\n", savepc, val);
+void WrZpX(mos6502 *cpu) {
+	DPRINTF(" $%.2X = #$%.2X", savepc, val);
 	RAM[savepc] = val;
-	PC++;
+	cpu->pc++;
 }
 
-void WrZpY(void) {
+void WrZpY(mos6502 *cpu) {
 	RAM[savepc] = val;
 
-	DPRINTF(" $%.2x = #$%.2X\n", savepc, val);
+	DPRINTF(" $%.2X = #$%.2X", savepc, val);
 
-	PC++;
+	cpu->pc++;
 }
 
-void WrAbs(void) {
-	DPRINTF(" %.2x @ %.4x\n", val, savepc);
+void WrAbs(mos6502 *cpu) {
+	DPRINTF(" %.2X @ %.4x", val, savepc);
 	WriteRAM(savepc, val);
-	PC++;PC++;
+	cpu->pc++;cpu->pc++;
 }
 
-void WrAbsX(void) {
-	DPRINTF(" %.2x @ %.4x\n", val, savepc);
+void WrAbsX(mos6502 *cpu) {
+	DPRINTF(" %.2X @ %.4x", val, savepc);
 	WriteRAM(savepc, val);
-	PC++;PC++;
+	cpu->pc++;cpu->pc++;
 }
 
-void WrAbsY(void) {
-	DPRINTF(" %.2x @ %.4x\n", val, savepc);
+void WrAbsY(mos6502 *cpu) {
+	DPRINTF(" %.2X @ %.4x", val, savepc);
 	WriteRAM(savepc, val);
-	PC++;PC++;
+	cpu->pc++;cpu->pc++;
 }
 
-void WrIndX(void) {
-	DPRINTF(" %.2x @ %.4x\n", val, savepc);
+void WrIndX(mos6502 *cpu) {
+	DPRINTF(" %.2X @ %.4x", val, savepc);
 	WriteRAM(savepc, val);
-	PC++;
+	cpu->pc++;
 }
 
-void WrIndY(void) {
-	DPRINTF(" %.2x @ %.4x\n", val, savepc);
+void WrIndY(mos6502 *cpu) {
+	DPRINTF(" %.2X @ %.4x", val, savepc);
 	WriteRAM(savepc, val);
-	PC++;
+	cpu->pc++;
 }
 
-void SAbs(void) {
-	DPRINTF("%.2x %.2x %.2x", RAM[PC], RAM[PC+1], RAM[PC+2]);
+void SAbs(mos6502 *cpu) {
+	DPRINTF("%.2X %.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
 	cycles = 4;
-	savepc = RAM[PC+1] + (RAM[PC+1+1]<<8);
+	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc+1+1]<<8);
 	val = RAM[savepc];
-	PC++;PC++;
+	cpu->pc++;cpu->pc++;
 }
 
-void SAbsX(void){
-	DPRINTF("%.2x %.2x %.2x", RAM[PC], RAM[PC+1], RAM[PC+2]);
+void SAbsX(mos6502 *cpu){
+	DPRINTF("%.2X %.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
 	cycles = 4;
-	savepc = RAM[PC+1] + (RAM[PC+1+1]<<8) + X;
-	PC++;PC++;
+	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc+1+1]<<8) + cpu->x;
+	cpu->pc++;cpu->pc++;
 }
 
-void SAbsY(void){
-	DPRINTF("%.2x %.2x %.2x", RAM[PC], RAM[PC+1], RAM[PC+2]);
+void SAbsY(mos6502 *cpu){
+	DPRINTF("%.2X %.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
 	cycles = 4;
-	savepc = RAM[PC+1] + (RAM[PC+1+1]<<8) + Y;
-	PC++;PC++;
+	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc+1+1]<<8) + cpu->y;
+	cpu->pc++;cpu->pc++;
 }
 
 //Memory Modify Functions, needs cycles added
-void MAcc(void) {
-	A=val;
+void MAcc(mos6502 *cpu) {
+	cpu->a = val;
 }
 
-void MZp(void) {
-	DPRINTF(" $%.2x = #$%.2x\n", savepc, val);
+void MZp(mos6502 *cpu) {
+	DPRINTF(" $%.2X = #$%.2X", savepc, val);
 	RAM[savepc] = val;
 }
 
-void MZpX(void) {
-	DPRINTF(" $%.2x = #$%.2x\n", savepc, val);
+void MZpX(mos6502 *cpu) {
+	DPRINTF(" $%.2X = #$%.2X", savepc, val);
 	RAM[savepc] = val;
 }
 
-void MZpY(void) {
-	DPRINTF(" $%.2x = #$%.2x\n", savepc, val);
+void MZpY(mos6502 *cpu) {
+	DPRINTF(" $%.2X = #$%.2X", savepc, val);
 	RAM[savepc] = val;
 }
 
-void MAbs(void) {
-	DPRINTF(" %.2x @ %.4x\n", val, savepc);
+void MAbs(mos6502 *cpu) {
+	DPRINTF(" %.2X @ %.4x", val, savepc);
 	WriteRAM(savepc, val);
 }
 
-void MAbsX(void) {
-	DPRINTF(" %.2x @ %.4x\n", val, savepc);
+void MAbsX(mos6502 *cpu) {
+	DPRINTF(" %.2X @ %.4x", val, savepc);
 	WriteRAM(savepc, val);
 }
 
-void MAbsY(void) {
-	DPRINTF(" %.2x @ %.4x\n", val, savepc);
+void MAbsY(mos6502 *cpu) {
+	DPRINTF(" %.2X @ %.4x", val, savepc);
 	WriteRAM(savepc, val);
 }
 
-void MIndX(void) {
-	DPRINTF(" %.2x @ %.4x\n", val, savepc);
+void MIndX(mos6502 *cpu) {
+	DPRINTF(" %.2X @ %.4x", val, savepc);
 	WriteRAM(savepc, val);
 }
 
-void MIndY(void) {
-	DPRINTF(" %.2x @ %.4x\n", val, savepc);
+void MIndY(mos6502 *cpu) {
+	DPRINTF(" %.2X @ %.4x", val, savepc);
 	WriteRAM(savepc, val);
 }
 
 //Operations
 
 //ADC
-void ADC(void) {
-	DPRINTF("\tADC\n");
+void ADC(mos6502 *cpu) {
+	DPRINTF("\tADC");
 
-	saveP = (P & 0x01);
+	saveP = (cpu->flags & 0x01);
 
 	//thanks to blargg, from parodius for these lines:
-	sum = ((signed char) A) + ((signed char)val) + saveP;
+	sum = ((signed char) cpu->a) + ((signed char)val) + saveP;
 
-	if ((sum + 128) & 0x100) P |= 0x40;
-	else P &= 0xbf;
+	if ((sum + 128) & 0x100) cpu->flags |= 0x40;
+	else cpu->flags &= 0xbf;
 
-	sum = A + saveP + val;
+	sum = cpu->a + saveP + val;
 
 	//if overflow, set carry
-	if (sum > 0xFF) P |= 0x01;
-	else P &= 0xfe;
+	if (sum > 0xFF) cpu->flags |= 0x01;
+	else cpu->flags &= 0xfe;
 
-	A =  (sum & 0xFF);
+	cpu->a =  (sum & 0xFF);
 
-	if ( P & 0x08) {
+	if (cpu->flags & 0x08) {
 		/* Fuck if I know what this does, I think it's DEC code that nestest doesn't like
 
-		   P &= 0xfe;
+		   cpu->flags &= 0xfe;
 
-		   if ((A & 0x0f)>0x09) A = A + 0x06;
+		   if ((cpu->a & 0x0f)>0x09) A = A + 0x06;
 
-		   if ((A & 0xf0)>0x90) {
+		   if ((cpu->a & 0xf0)>0x90) {
 		   A = A + 0x60;
-		   P |= 0x01;
+		   cpu->flags |= 0x01;
 		   }
 		   */
 	}else{
 		cycles++;
 	}
 
-	chknegzero(A);
+	chknegzero(cpu, cpu->a);
 }
 
 //AND
-void AND(void) {
-	DPRINTF("\tAND #$%.2X\n", val);
-	A &= val;
-	chknegzero(A);
+void AND(mos6502 *cpu) {
+	DPRINTF("\tAND #$%.2X", val);
+	cpu->a &= val;
+	chknegzero(cpu, cpu->a);
 }
 
-
 //ASL
-void ASL(void) {
-	DPRINTF("\tASL\n");
-	P = (P & 0xfe) | ((val >>7) & 0x01);
+void ASL(mos6502 *cpu) {
+	DPRINTF("\tASL");
+	cpu->flags = (cpu->flags & 0xfe) | ((val >>7) & 0x01);
 	val = val << 1;
-	chknegzero(val);
+	chknegzero(cpu, val);
+}
+
+//BIT
+void BIT(mos6502 *cpu) {
+	if (val & cpu->a) cpu->flags &= 0xfd;
+	else cpu->flags |= 0x02;
+
+	cpu->flags = (cpu->flags & 0x3f) | (val & 0xc0);
+
+	DPRINTF("\tBIT $%.2X = #$%.2X", RAM[cpu->pc], val);
 }
 
 //Branches
 
 //BCC
-void BCC(void) {
+void BCC(mos6502 *cpu) {
 
-	if ((RAM[PC+1] & 0x80)) {
-		pSigned = (signed char)RAM[PC+1];
+	if ((RAM[cpu->pc+1] & 0x80)) {
+		pSigned = (signed char)RAM[cpu->pc+1];
 	} else {
-		pSigned = RAM[PC+1];
+		pSigned = RAM[cpu->pc+1];
 	}
 
-	DPRINTF("%.2x %.2x %.2x", RAM[PC], RAM[PC+1], RAM[PC+2]);
+	DPRINTF("%.2X %.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
 	DPRINTF("\tBCC");
-	DPRINTF(" $%.4x\n", (PC + 2) + pSigned);
+	DPRINTF(" $%.4x", (cpu->pc + 2) + pSigned);
 
-	if ((P & 0x01)==0){
-		PC = PC + pSigned + 1;
+	if ((cpu->flags & 0x01)==0){
+		cpu->pc = cpu->pc + pSigned + 1;
 
-		DPRINTF("Branch!\n");
+		DPRINTF("Branch!");
 
 	} else {
-		PC++;
+		cpu->pc++;
 	}
 
 	cycles = 2;
 }
 
 //BCS
-void BCS(void) {
-
+void BCS(mos6502 *cpu) {
 	//converts unsigned to signed
-	if ((RAM[PC+1] & 0x80)) {
-		pSigned = RAM[PC+1] - 0x100;
+	if ((RAM[cpu->pc+1] & 0x80)) {
+		pSigned = RAM[cpu->pc+1] - 0x100;
 	} else
-		pSigned = RAM[PC+1];
+		pSigned = RAM[cpu->pc+1];
 
-	DPRINTF("%.2x %.2x %.2x", RAM[PC], RAM[PC+1], RAM[PC+2]);
+	DPRINTF("%.2X %.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
 	DPRINTF("\tBCS");
-	DPRINTF(" $%.4x\n", (PC + 2) + pSigned);
+	DPRINTF(" $%.4x", (cpu->pc + 2) + pSigned);
 
-	if (P & 0x01) {
-		PC = PC + pSigned;
-		PC++;
+	if (cpu->flags & 0x01) {
+		cpu->pc = cpu->pc + pSigned;
+		cpu->pc++;
 
-		DPRINTF("Branch!\n");
+		DPRINTF("Branch!");
 
 	} else
-		PC++;
+		cpu->pc++;
 
 	cycles = 2;
 }
 
 //BEQ
-void BEQ(void) {
+void BEQ(mos6502 *cpu) {
 
-	if ((RAM[PC+1] & 0x80)) {
-		pSigned = RAM[PC+1] - 0x100;
-	} else pSigned = RAM[PC+1];
+	if ((RAM[cpu->pc+1] & 0x80)) {
+		pSigned = RAM[cpu->pc+1] - 0x100;
+	} else pSigned = RAM[cpu->pc+1];
 
 
-	DPRINTF("%.2x %.2x %.2x", RAM[PC], RAM[PC+1], RAM[PC+2]);
+	DPRINTF("%.2X %.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
 	DPRINTF("\tBEQ");
 
-	DPRINTF(" $%.4x\n", (PC + 2) + pSigned);
+	DPRINTF(" $%.4x", (cpu->pc + 2) + pSigned);
 
 
-	if (P & 0x02) {
-		PC = PC + pSigned;
+	if (cpu->flags & 0x02) {
+		cpu->pc = cpu->pc + pSigned;
 		cycles = 3;
 
-		DPRINTF("Branch!\n");
+		DPRINTF("Branch!");
 
-		PC++;
-	} else PC++;
+		cpu->pc++;
+	} else cpu->pc++;
 
 	cycles = 2;
 }
 
-//BIT
-void BIT(void) {
-
-	if (val & A) P &= 0xfd;
-	else P |= 0x02;
-
-	P = (P & 0x3f) | (val & 0xc0);
-
-
-	DPRINTF("\tBIT");
-
-	DPRINTF(" $%.2X = #$%.2X\n", RAM[PC], val);
-
-
-}
-
 //BMI
-void BMI(void) {
+void BMI(mos6502 *cpu) {
 
 	cycles = 2;
 	//converts unsigned to signed
 
-	if ((RAM[PC+1] & 0x80)) {
-		pSigned = RAM[PC+1] - 0x100;
+	if ((RAM[cpu->pc+1] & 0x80)) {
+		pSigned = RAM[cpu->pc+1] - 0x100;
 	} else
-		pSigned = RAM[PC+1];
+		pSigned = RAM[cpu->pc+1];
 
 
-	DPRINTF("%.2x %.2x %.2x", RAM[PC], RAM[PC+1], RAM[PC+2]);
+	DPRINTF("%.2X %.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
 	DPRINTF("\tBMI");
 
-	DPRINTF(" $%.4x\n", (PC + 2) + pSigned);
+	DPRINTF(" $%.4x", (cpu->pc + 2) + pSigned);
 
 
-	if ((RAM[PC+1]>>8) != (PC>>8))
+	if ((RAM[cpu->pc+1]>>8) != (cpu->pc>>8))
 		cycles++;
 
-	if ((P & 0x80)) {
+	if ((cpu->flags & 0x80)) {
 
-		DPRINTF("Branch!\n");
+		DPRINTF("Branch!");
 
-		PC = PC + pSigned;
+		cpu->pc = cpu->pc + pSigned;
 		++cycles;
-		PC++;
+		cpu->pc++;
 	} else
 
-		PC++;
+		cpu->pc++;
 
 }
 
 //BNE
-void BNE(void) {
+void BNE(mos6502 *cpu) {
 
 	cycles =2 ;
 	//converts unsigned to signed
 
-	if ((RAM[PC+1] & 0x80)) {
-		pSigned = RAM[PC+1] - 0x100;
+	if ((RAM[cpu->pc+1] & 0x80)) {
+		pSigned = RAM[cpu->pc+1] - 0x100;
 	} else
-		pSigned = RAM[PC+1];
+		pSigned = RAM[cpu->pc+1];
 
 
-	DPRINTF("%.2x %.2x %.2x", RAM[PC], RAM[PC+1], RAM[PC+2]);
+	DPRINTF("%.2X %.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
 	DPRINTF("\tBNE");
 
-	DPRINTF(" $%.4x\n", (PC + 2) + pSigned);
+	DPRINTF(" $%.4x", (cpu->pc + 2) + pSigned);
 
 
-	if ((RAM[PC+1]>>8) != (PC>>8))
+	if ((RAM[cpu->pc+1]>>8) != (cpu->pc>>8))
 		cycles = cycles + 2;
 
-	if ((P & 0x02)==0) {
+	if ((cpu->flags & 0x02)==0) {
 
-		DPRINTF("Branch!\n");
+		DPRINTF("Branch!");
 
 
-		PC = PC + pSigned;
+		cpu->pc = cpu->pc + pSigned;
 		++cycles;
-		PC++;
+		cpu->pc++;
 	} else
 
-		PC++;
+		cpu->pc++;
 
 }
 
 //BPL
-void BPL(void) {
+void BPL(mos6502 *cpu) {
 
 	//converts unsigned to signed
-	if ((RAM[PC+1] & 0x80))pSigned = (signed char)RAM[PC+1];
-	else pSigned = RAM[PC+1];
+	if ((RAM[cpu->pc+1] & 0x80))pSigned = (signed char)RAM[cpu->pc+1];
+	else pSigned = RAM[cpu->pc+1];
 
 	cycles = 2;
 
 
-	DPRINTF("%.2x %.2x \tBPL", RAM[PC], RAM[PC+1]);
+	DPRINTF("%.2X %.2X \tBPL", RAM[cpu->pc], RAM[cpu->pc+1]);
 
-	DPRINTF(" $%.4x\n", PC + 2 + pSigned);
+	DPRINTF(" $%.4x", cpu->pc + 2 + pSigned);
 
 
-	if (P & 0x80) {
+	if (cpu->flags & 0x80) {
 
-		PC++;
+		cpu->pc++;
 	} else {
-		PC = PC + 2 + pSigned -1;
+		cpu->pc = cpu->pc + 2 + pSigned -1;
 
 
-		DPRINTF("Branch!\n");
+		DPRINTF("Branch!");
 
 	}
 }
 
 //BVC
-void BVC(void) {
+void BVC(mos6502 *cpu) {
 
-	if ((RAM[PC+1] & 0x80))pSigned = (signed char)RAM[PC+1];
-	else pSigned = RAM[PC+1];
+	if ((RAM[cpu->pc+1] & 0x80))pSigned = (signed char)RAM[cpu->pc+1];
+	else pSigned = RAM[cpu->pc+1];
 
 	cycles = 2;
 
 
-	DPRINTF("%.2x %.2x \tBVC", RAM[PC], RAM[PC+1]);
+	DPRINTF("%.2X %.2X \tBVC", RAM[cpu->pc], RAM[cpu->pc+1]);
 
-	DPRINTF(" $%.4x\n", PC + 2 + pSigned);
+	DPRINTF(" $%.4x", cpu->pc + 2 + pSigned);
 
 
-	if (P & 0x40) {
-		PC++;
+	if (cpu->flags & 0x40) {
+		cpu->pc++;
 	} else {
-		PC = PC + 2 + pSigned -1;
+		cpu->pc = cpu->pc + 2 + pSigned -1;
 
-		DPRINTF("Branch!\n");
+		DPRINTF("Branch!");
 	}
 }
 
 //BVS
-void BVS(void) {
+void BVS(mos6502 *cpu) {
 
 	//converts unsigned to signed
-	if ((RAM[PC+1] & 0x80))pSigned = (signed char)RAM[PC+1];
-	else pSigned = RAM[PC+1];
+	if ((RAM[cpu->pc+1] & 0x80))pSigned = (signed char)RAM[cpu->pc+1];
+	else pSigned = RAM[cpu->pc+1];
 
 	cycles = 2;
 
 
-	DPRINTF("%.2x %.2x \tBVS", RAM[PC], RAM[PC+1]);
-	DPRINTF(" $%.4x\n", PC + 2 + pSigned);
+	DPRINTF("%.2X %.2X \tBVS", RAM[cpu->pc], RAM[cpu->pc+1]);
+	DPRINTF(" $%.4x", cpu->pc + 2 + pSigned);
 
-	if (P & 0x40) {
-		PC = PC + 2 + pSigned -1;
+	if (cpu->flags & 0x40) {
+		cpu->pc = cpu->pc + 2 + pSigned -1;
 
-		DPRINTF("Branch!\n");
+		DPRINTF("Branch!");
 
 	} else {
-		PC++;
+		cpu->pc++;
 	}
 
 }
 
 //CMP
-void CMP(void) {
+void CMP(mos6502 *cpu) {
 
-	DPRINTF("\tCMP #$%.2X\n", val);
+	DPRINTF("\tCMP #$%.2X", val);
 
-	if (A == val) P |= 0x02;
-	else P &= 0xfd;
+	if (cpu->a == val) cpu->flags |= 0x02;
+	else cpu->flags &= 0xfd;
 
-	if (A >= val) P |= 0x01;
-	else P &= 0xfe;
+	if (cpu->a >= val) cpu->flags |= 0x01;
+	else cpu->flags &= 0xfe;
 
-	if ((A - (signed char)val) & 0x80) P |= 0x80;
-	else P &= 0x7f;
+	if ((cpu->a - (signed char)val) & 0x80) cpu->flags |= 0x80;
+	else cpu->flags &= 0x7f;
 }
 
 //CPX
-void CPX(void) {
+void CPX(mos6502 *cpu) {
+	DPRINTF("\tCPX");
 
-	DPRINTF("\tCPX\n");
+	if (cpu->x == val) cpu->flags |= 0x02;
+	else cpu->flags &= 0xfd;
 
-	if (X == val) P |= 0x02;
-	else P &= 0xfd;
+	if (cpu->x >= val) cpu->flags |= 0x01;
+	else cpu->flags &= 0xfe;
 
-	if (X >= val) P |= 0x01;
-	else P &= 0xfe;
-
-	if ((X - (signed char)val) & 0x80) P |= 0x80;
-	else P &= 0x7f;
+	if ((cpu->x - (signed char)val) & 0x80) cpu->flags |= 0x80;
+	else cpu->flags &= 0x7f;
 }
 
 //CPY
-void CPY(void) {
-
-	DPRINTF("\tCPY\n");
+void CPY(mos6502 *cpu) {
+	DPRINTF("\tCPY");
 
 	//we use the helper variable
-	helper = Y - val;
-	//if Y = PC+1, we set zero
-	if (helper == 0) P |= 0x02;
-	else P &= 0xfd;
-	if (Y+0x100 - val>0xff) P |= 0x01;
-	else P &= 0xfe;
-	//if Y < PC+1, set negative bit
-	if (helper & 0x80) P |= 0x80;
-	else P &= 0x7f;
+	helper = cpu->y - val;
+	//if Y = cpu->pc+1, we set zero
+	if (helper == 0) cpu->flags |= 0x02;
+	else cpu->flags &= 0xfd;
+	if (cpu->y+0x100 - val>0xff) cpu->flags |= 0x01;
+	else cpu->flags &= 0xfe;
+	//if Y < cpu->pc+1, set negative bit
+	if (helper & 0x80) cpu->flags |= 0x80;
+	else cpu->flags &= 0x7f;
 }
 
 //DEC
-void DEC(void) {
-
+void DEC(mos6502 *cpu) {
 	DPRINTF("\tDEC");
-
 	val--;
-	chknegzero(val);
+	chknegzero(cpu, val);
 }
 
 //DEX
-void DEX(void) {
-	DPRINTF("\tDEX\n");
-
-	X--;
-	chknegzero(X);
+void DEX(mos6502 *cpu) {
+	DPRINTF("\tDEX");
+	cpu->x--;
+	chknegzero(cpu, cpu->x);
 	cycles=2;
 }
 
 //DEY
-void DEY(void) {
-	DPRINTF("\tDEY\n");
-
-	Y--;
-	chknegzero(Y);
+void DEY(mos6502 *cpu) {
+	DPRINTF("\tDEY");
+	cpu->y--;
+	chknegzero(cpu, cpu->y);
 	cycles=2;
 }
 
 //EOR
-void EOR(void) {
-	DPRINTF("\tEOR\n");
-
-	A ^= val;
-	chknegzero(A);
+void EOR(mos6502 *cpu) {
+	DPRINTF("\tEOR");
+	cpu->a ^= val;
+	chknegzero(cpu, cpu->a);
 }
 
 //INC
-void INC(void) {
-
-	DPRINTF("\tINC\n");
-
+void INC(mos6502 *cpu) {
+	DPRINTF("\tINC");
 	val++;
-	chknegzero(val);
+	chknegzero(cpu, val);
 }
 
 //INX
-void INX(void) {
-	DPRINTF("\tINX\n");
-
-	X++;
-	chknegzero(X);
+void INX(mos6502 *cpu) {
+	DPRINTF("\tINX");
+	cpu->x++;
+	chknegzero(cpu, cpu->x);
 	cycles=2;
 }
 
 //INY
-void INY(void) {
-	DPRINTF("\tINY\n");
-
-	Y++;
-	chknegzero(Y);
+void INY(mos6502 *cpu) {
+	DPRINTF("\tINY");
+	cpu->y++;
+	chknegzero(cpu, cpu->y);
 	cycles=2;
 }
 
 //JMP
-void JMP(void) {
-	DPRINTF("\tJMP");
-	DPRINTF(" $%.2x%.2x\n", RAM[PC], RAM[PC-1]);
+void JMP(mos6502 *cpu) {
+	DPRINTF("\tJMP $%.2X%.2X", RAM[cpu->pc], RAM[cpu->pc-1]);
 
-	PC = savepc;
-	PC--;
-	cycles = 5;
+	cpu->pc = savepc;
+	cpu->pc--;
+	cycles = 3;
 }
 
 //JSR
-void JSR(void) {
-	savepc = PC + 0x2;
-	RAM[0x0100+STACK--]= ((savepc >> 8));
-	RAM[0x0100+STACK--]= ((savepc & 0xff));
+void JSR(mos6502 *cpu) {
+	savepc = cpu->pc + 0x2;
+	RAM[0x0100+cpu->sp--]= ((savepc >> 8));
+	RAM[0x0100+cpu->sp--]= ((savepc & 0xff));
 
-	DPRINTF("%.2x %.2x %.2x \tJSR", RAM[PC], RAM[PC+1], RAM[PC+2]);
-	DPRINTF(" $%.2X%.2X\t", RAM[PC+2], RAM[PC+1]);
-	DPRINTF("Jump to Subroutine!\n");
+	DPRINTF("%.2X %.2X %.2X \tJSR", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
+	DPRINTF(" $%.2X%.2X\t", RAM[cpu->pc+2], RAM[cpu->pc+1]);
+	DPRINTF("Jump to Subroutine!");
 
-	savepc = RAM[PC+1] + (RAM[PC + 2] << 8);
+	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc + 2] << 8);
 	savepc = savepc - 0x1;
-	PC = savepc;
+	cpu->pc = savepc;
 	cycles = 6;
 }
 
 //LDA
-void LDA(void) {
+void LDA(mos6502 *cpu) {
 	DPRINTF("\tLDA ");
-	A = val;
-	chknegzero(A);
+	cpu->a = val;
+	chknegzero(cpu, cpu->a);
 }
 
 //LDX
-void LDX(void) {
-	DPRINTF("\tLDX\n");
-	X = val;
-	chknegzero(X);
+void LDX(mos6502 *cpu) {
+	DPRINTF("\tLDX");
+	cpu->x = val;
+	chknegzero(cpu, cpu->x);
 }
 
 //LDY
-void LDY(void) {
-	DPRINTF("\tLDY\n");
-	Y = val;
-	chknegzero(Y);
+void LDY(mos6502 *cpu) {
+	DPRINTF("\tLDY");
+	cpu->y = val;
+	chknegzero(cpu, cpu->y);
 }
 
 //LSR
-void LSR(void) {
-	DPRINTF("\tLSR\n");
-	P = (P & 0xfe) | (val & 0x01);
+void LSR(mos6502 *cpu) {
+	DPRINTF("\tLSR");
+	cpu->flags = (cpu->flags & 0xfe) | (val & 0x01);
 	val = val >> 1;
-	chknegzero(val);
+	chknegzero(cpu, val);
 }
 
 //ORA
-void ORA(void) {
-	DPRINTF("\tORA #$%.2X\n", val);
-	A |= val;
-	chknegzero(A);
+void ORA(mos6502 *cpu) {
+	DPRINTF("\tORA #$%.2X", val);
+	cpu->a |= val;
+	chknegzero(cpu, cpu->a);
 }
 
 //PHA
-void PHA(void) {
-	DPRINTF("\tPHA\n");
-	RAM[0x0100+STACK--] = A;
+void PHA(mos6502 *cpu) {
+	DPRINTF("\tPHA");
+	RAM[0x0100+cpu->sp--] = cpu->a;
 	cycles = 3;
 }
 
 //PHP
-void PHP(void) {
-	DPRINTF("%.2x\tPHP\n", RAM[PC]);
-	val=P;
+void PHP(mos6502 *cpu) {
+	DPRINTF("%.2X\tPHP", RAM[cpu->pc]);
+	val=cpu->flags;
 	val |= 0x10;
 	val |= 0x20;
-	RAM[0x0100+STACK--]=val;
+	RAM[0x0100+cpu->sp--]=val;
 	cycles = 3;
 }
 
 //PLA
-void PLA(void) {
-	DPRINTF("\tPLA\n");
-	A = RAM[0x0100 + ++STACK];
-	chknegzero(A);
+void PLA(mos6502 *cpu) {
+	DPRINTF("\tPLA");
+	cpu->a = RAM[0x0100 + ++cpu->sp];
+	chknegzero(cpu, cpu->a);
 	cycles = 4;
 }
 
 //PLP
-void PLP(void) {
-	DPRINTF("\tPLP\n");
-	P = RAM[0x0100 + ++STACK];
+void PLP(mos6502 *cpu) {
+	DPRINTF("\tPLP");
+	cpu->flags = RAM[0x0100 + ++cpu->sp];
 	cycles = 4;
 }
 
 //ROL
-void ROL(void) {
-	DPRINTF("\tROL\n");
-	helper = (P & 0x01);
-	P = (P & 0xfe) | ((val >>7) & 0x01);
+void ROL(mos6502 *cpu) {
+	DPRINTF("\tROL");
+	helper = (cpu->flags & 0x01);
+	cpu->flags = (cpu->flags & 0xfe) | ((val >>7) & 0x01);
 	val = val << 1;
 	val |= helper;
-	chknegzero(val);
+	chknegzero(cpu, val);
 }
 
 //ROR
-void ROR(void) {
-
+void ROR(mos6502 *cpu) {
 	DPRINTF("\tROR");
-
-	saveP = (P & 0x01);
-	P = (P & 0xfe) | (val & 0x01);
+	saveP = (cpu->flags & 0x01);
+	cpu->flags = (cpu->flags & 0xfe) | (val & 0x01);
 	val = val >> 1;
 	if (saveP) val |= 0x80;
-	chknegzero(val);
+	chknegzero(cpu, val);
 }
 
 //RTI
-void RTI(void) {
-	DPRINTF("%.2x \tRTI\n", RAM[PC]);
-	DPRINTF("\n\nReturn from Interrupt!\n\n");
-	P = RAM[0x0100 + ++STACK] | 0x20;
-	savepc = RAM[0x0100 + ++STACK];
-	savepc |= (RAM[0x0100 + ++STACK] << 8 );
-	PC = savepc - 1;
+void RTI(mos6502 *cpu) {
+	DPRINTF("%.2X \tRTI", RAM[cpu->pc]);
+	DPRINTF("Return from Interrupt!");
+	cpu->flags = RAM[0x0100 + ++cpu->sp] | 0x20;
+	savepc = RAM[0x0100 + ++cpu->sp];
+	savepc |= (RAM[0x0100 + ++cpu->sp] << 8 );
+	cpu->pc = savepc - 1;
 }
 
 //RTS
-void RTS(void) {
-	DPRINTF("%.2x \tRTS\n", RAM[PC]);
-	DPRINTF("\n\nReturn to Subroutine!\n\n");
-	savepc = RAM[0x0100 + ++STACK] ;
-	savepc = savepc + (((RAM[0x0100 + ++STACK])<< 8 ));
-	PC = savepc;
+void RTS(mos6502 *cpu) {
+	DPRINTF("%.2X \tRTS", RAM[cpu->pc]);
+	DPRINTF("Return to Subroutine!");
+	savepc = RAM[0x0100 + ++cpu->sp] ;
+	savepc = savepc + (((RAM[0x0100 + ++cpu->sp])<< 8 ));
+	cpu->pc = savepc;
 	cycles = 6;
 }
 
 //SBC
-void SBC(void) {
-	DPRINTF("\tSBC\n");
+void SBC(mos6502 *cpu) {
+	DPRINTF("\tSBC");
 
-	saveP = (P & 0x01);
+	saveP = (cpu->flags & 0x01);
 
 	//thanks to blargg, from parodius for these lines:
-	sum = ((signed char) A) + (((signed char)val)) + (saveP << 4);
+	sum = ((signed char) cpu->a) + (((signed char)val)) + (saveP << 4);
 
-	sum = A + (val^0xff) + saveP;
-	if ((A ^ sum) & (A ^ val) & 0x80) P |= 0x40;
-	else P &= 0xbf;
+	sum = cpu->a + (val^0xff) + saveP;
+	if ((cpu->a ^ sum) & (cpu->a ^ val) & 0x80) cpu->flags |= 0x40;
+	else cpu->flags &= 0xbf;
 
-	if (sum>0xff) P |= 0x01; else P &= 0xfe;
+	if (sum>0xff) cpu->flags |= 0x01; else cpu->flags &= 0xfe;
 
-	A =  sum;
+	cpu->a = sum;
 
-	if ( P & 0x08) {
+	if ( cpu->flags & 0x08) {
 		/*  A = A - 0x66;
-			P &= 0xfe;
+			cpu->flags &= 0xfe;
 
-			if ((A & 0x0f)>0x09) A = A + 0x06;
+			if ((cpu->a & 0x0f)>0x09) A = A + 0x06;
 
-			if ((A & 0xf0)>0x90) {
+			if ((cpu->a & 0xf0)>0x90) {
 			A = A + 0x60;
-			P |= 0x01;
+			cpu->flags |= 0x01;
 			}
 			*/
 	} else {
 		cycles++;
 	}
 
-	chknegzero(A);
+	chknegzero(cpu, cpu->a);
 }
 
 //STA
-void STA(void) {
+void STA(mos6502 *cpu) {
 	DPRINTF("\tSTA");
-	val = A;
+	val = cpu->a;
 }
 
 //STX
-void STX(void) {
+void STX(mos6502 *cpu) {
 	DPRINTF("\tSTX");
-	val = X;
+	val = cpu->x;
 }
 
 //STY
-void STY(void) {
+void STY(mos6502 *cpu) {
 	DPRINTF("\tSTY");
-	val=Y;
+	val = cpu->y;
 }
 
 //TAX
-void TAX(void) {
-	DPRINTF("\tTAX\n");
-	X = A;
-	chknegzero(X);
-	cycles=2;
+void TAX(mos6502 *cpu) {
+	DPRINTF("\tTAX");
+	cpu->x = cpu->a;
+	chknegzero(cpu, cpu->x);
+	cycles = 2;
 }
 
 //TAY
-void TAY(void) {
-	DPRINTF("\tTAY\n");
-	Y = A;
-	chknegzero(Y);
-	cycles=2;
+void TAY(mos6502 *cpu) {
+	DPRINTF("\tTAY");
+	cpu->y = cpu->a;
+	chknegzero(cpu, cpu->y);
+	cycles = 2;
 }
 
 //TSX
-void TSX(void) {
-	DPRINTF("\tTSX\n");
-	X = STACK;
-	chknegzero(X);
+void TSX(mos6502 *cpu) {
+	DPRINTF("\tTSX");
+	cpu->x = cpu->sp;
+	chknegzero(cpu, cpu->x);
 	cycles = 2;
 }
 
 //TXA
-void TXA(void) {
-	DPRINTF("\tTXA\n");
-	A = X;
-	chknegzero(A);
+void TXA(mos6502 *cpu) {
+	DPRINTF("\tTXA");
+	cpu->a = cpu->x;
+	chknegzero(cpu, cpu->a);
 	cycles = 2;
 }
 
 //TXS
-void TXS(void) {
-	DPRINTF("\tTXS\n");
-	STACK = X;
+void TXS(mos6502 *cpu) {
+	DPRINTF("\tTXS");
+	cpu->sp = cpu->x;
 	cycles = 2;
 }
 
 //TYA
-void TYA(void) {
-	DPRINTF("\tTYA\n");
-	A = Y;
-	chknegzero(A);
+void TYA(mos6502 *cpu) {
+	DPRINTF("\tTYA");
+	cpu->a = cpu->y;
+	chknegzero(cpu, cpu->a);
 	cycles = 2;
 }
 
-int DoOP(int op) {
-
-	cycles = 0;
-
-	DPRINTF("$%.4X:", PC);
-
-	switch (op) {
-			//BRK, 7 cycles, 1 byte, needs to push PC+2 and P into stack
-		case 0x0:
-			DPRINTF("%.2x \tBRK\n", RAM[PC]);
-			PC+=2;
-			pushstack();
-			PC -=2;
-			P |= 0x10;
+void BRK(mos6502 *cpu) {
+			DPRINTF("%.2X \tBRK", RAM[cpu->pc]);
+			cpu->pc+=2;
+			pushstack(cpu);
+			cpu->pc -=2;
+			cpu->flags |= 0x10;
 			cycles = 7;
+			printf("nestest: %.2X %.2X", RAM[2], RAM[3]);
 			//This is here to prevent executing garbage data as opcodes
 			//most games I've seen don't use it
 			exit(0);
-			break;
+}
+
+int mos6502_doop(mos6502 *cpu) {
+	cycles = 0;
+
+	//fprintf(stderr, "nestest: %.2X %.2X %.2X %.2X ", RAM[0], RAM[1], RAM[2], RAM[3]);
+	DPRINTF("%.4X  ", cpu->pc);
+
+	uint8_t op = cpu->ram[cpu->pc];
+
+	switch (op) {
 
 			//Flags
-		case 0x18: P &= 0xFE; cycles = 2;break;
-		case 0x38: P |= 0x01; cycles = 2;break;
-		case 0x58: P &= 0xFB; cycles = 2;break;
-		case 0x78: P |= 0x04; cycles = 2;break;
-		case 0xB8: P &= 0xBF; cycles = 2;break;
-		case 0xD8: P &= 0xF7; cycles = 2;break;
-		case 0xF8: P |= 0x08; cycles = 2;break;
-
-			/* General Ops */
+		case 0x18: cpu->flags &= 0xFE; cycles = 2;break;
+		case 0x58: cpu->flags &= 0xFB; cycles = 2;break;
+		case 0xB8: cpu->flags &= 0xBF; cycles = 2;break;
+		case 0xD8: cpu->flags &= 0xF7; cycles = 2;break;
+		case 0x38: cpu->flags |= 0x01; cycles = 2;break;
+		case 0x78: cpu->flags |= 0x04; cycles = 2;break;
+		case 0xF8: cpu->flags |= 0x08; cycles = 2;break;
 
 			//ADC
-		case 0x69: RdImd();  ADC(); break;
-		case 0x65: RdZp();   ADC(); break;
-		case 0x75: RdZpX();  ADC(); break;
-		case 0x6D: RdAbs();  ADC(); break;
-		case 0x7D: RdAbsX(); ADC(); break;
-		case 0x79: RdAbsY(); ADC(); break;
-		case 0x61: RdIndX(); ADC(); break;
-		case 0x71: RdIndY(); ADC(); break;
+		case 0x69: RdImd(cpu);  ADC(cpu); break;
+		case 0x65: RdZp(cpu);   ADC(cpu); break;
+		case 0x75: RdZpX(cpu);  ADC(cpu); break;
+		case 0x6D: RdAbs(cpu);  ADC(cpu); break;
+		case 0x7D: RdAbsX(cpu); ADC(cpu); break;
+		case 0x79: RdAbsY(cpu); ADC(cpu); break;
+		case 0x61: RdIndX(cpu); ADC(cpu); break;
+		case 0x71: RdIndY(cpu); ADC(cpu); break;
 
 			//AND
-		case 0x29: RdImd();  AND(); break;
-		case 0x25: RdZp();   AND(); break;
-		case 0x35: RdZpX();  AND(); break;
-		case 0x2D: RdAbs();  AND(); break;
-		case 0x3D: RdAbsX(); AND(); break;
-		case 0x39: RdAbsY(); AND(); break;
-		case 0x21: RdIndX(); AND(); break;
-		case 0x31: RdIndY(); AND(); break;
+		case 0x29: RdImd(cpu);  AND(cpu); break;
+		case 0x25: RdZp(cpu);   AND(cpu); break;
+		case 0x35: RdZpX(cpu);  AND(cpu); break;
+		case 0x2D: RdAbs(cpu);  AND(cpu); break;
+		case 0x3D: RdAbsX(cpu); AND(cpu); break;
+		case 0x39: RdAbsY(cpu); AND(cpu); break;
+		case 0x21: RdIndX(cpu); AND(cpu); break;
+		case 0x31: RdIndY(cpu); AND(cpu); break;
 
-				   //ASL
-		case 0x0A: RdAcc(); ASL(); MAcc();  break;
-		case 0x06: RdZp(); 	ASL(); MZp();   break;
-		case 0x16: RdZpX(); ASL(); MZpX();  break;
-		case 0x0E: SAbs();  ASL(); MAbs();  break;
-		case 0x1E: RdAbsX();ASL(); MAbsX(); break;
+			//ASL
+		case 0x0A: RdAcc(cpu); ASL(cpu); MAcc(cpu);  break;
+		case 0x06: RdZp(cpu);  ASL(cpu); MZp(cpu);   break;
+		case 0x16: RdZpX(cpu); ASL(cpu); MZpX(cpu);  break;
+		case 0x0E: SAbs(cpu);  ASL(cpu); MAbs(cpu);  break;
+		case 0x1E: RdAbsX(cpu);ASL(cpu); MAbsX(cpu); break;
 
-				   //Branches
-		case 0x90: BCC(); break;
-		case 0xB0: BCS(); break;
-		case 0xF0: BEQ(); break;
-		case 0x30: BMI(); break;
-		case 0xD0: BNE(); break;
-		case 0x10: BPL(); break;
-		case 0x50: BVC(); break;
-		case 0x70: BVS(); break;
+			//Branches
+		case 0x90: BCC(cpu); break;
+		case 0xB0: BCS(cpu); break;
+		case 0xF0: BEQ(cpu); break;
+		case 0x30: BMI(cpu); break;
+		case 0xD0: BNE(cpu); break;
+		case 0x10: BPL(cpu); break;
+		case 0x50: BVC(cpu); break;
+		case 0x70: BVS(cpu); break;
 
-				   //BIT
-		case 0x24: RdZp();  BIT(); break;
-		case 0x2C: RdAbs(); BIT(); break;
+			//BIT
+		case 0x24: RdZp(cpu);  BIT(cpu); break;
+		case 0x2C: RdAbs(cpu); BIT(cpu); break;
+			
+		case 0x00: BRK(cpu); break;
 
 				   //CMP
-		case 0xC9: RdImd();  CMP(); break;
-		case 0xC5: RdZp();   CMP(); break;
-		case 0xD5: RdZpX();  CMP(); break;
-		case 0xCD: RdAbs();  CMP(); break;
-		case 0xDD: RdAbsX(); CMP(); break;
-		case 0xD9: RdAbsY(); CMP(); break;
-		case 0xC1: RdIndX(); CMP(); break;
-		case 0xD1: RdIndY(); CMP(); break;
+		case 0xC9: RdImd(cpu);  CMP(cpu); break;
+		case 0xC5: RdZp(cpu);   CMP(cpu); break;
+		case 0xD5: RdZpX(cpu);  CMP(cpu); break;
+		case 0xCD: RdAbs(cpu);  CMP(cpu); break;
+		case 0xDD: RdAbsX(cpu); CMP(cpu); break;
+		case 0xD9: RdAbsY(cpu); CMP(cpu); break;
+		case 0xC1: RdIndX(cpu); CMP(cpu); break;
+		case 0xD1: RdIndY(cpu); CMP(cpu); break;
 
 				   //CPX
-		case 0xE0: RdImd(); CPX(); break;
-		case 0xE4: RdZp();  CPX(); break;
-		case 0xEC: RdAbs(); CPX(); break;
+		case 0xE0: RdImd(cpu); CPX(cpu); break;
+		case 0xE4: RdZp(cpu);  CPX(cpu); break;
+		case 0xEC: RdAbs(cpu); CPX(cpu); break;
 
 				   //CPY
-		case 0xC0: RdImd(); CPY(); break;
-		case 0xC4: RdZp();  CPY(); break;
-		case 0xCC: RdAbs(); CPY(); break;
+		case 0xC0: RdImd(cpu); CPY(cpu); break;
+		case 0xC4: RdZp(cpu);  CPY(cpu); break;
+		case 0xCC: RdAbs(cpu); CPY(cpu); break;
 
 				   //DEC
-		case 0xC6: RdZp();  DEC(); MZp();   break;
-		case 0xD6: RdZpX(); DEC(); MZpX();  break;
-		case 0xCE: SAbs();  DEC(); MAbs();  break;
-		case 0xDE: RdAbsX();DEC(); MAbsX(); break;
+		case 0xC6: RdZp(cpu);  DEC(cpu); MZp(cpu);   break;
+		case 0xD6: RdZpX(cpu); DEC(cpu); MZpX(cpu);  break;
+		case 0xCE: SAbs(cpu);  DEC(cpu); MAbs(cpu);  break;
+		case 0xDE: RdAbsX(cpu);DEC(cpu); MAbsX(cpu); break;
 
 				   //DEX
-		case 0xCA: DEX(); break;
+		case 0xCA: DEX(cpu); break;
 
 				   //DEY
-		case 0x88: DEY(); break;
+		case 0x88: DEY(cpu); break;
 
 				   //EOR
-		case 0x49: RdImd();  EOR(); break;
-		case 0x45: RdZp();   EOR(); break;
-		case 0x55: RdZpX();  EOR(); break;
-		case 0x4D: RdAbs();  EOR(); break;
-		case 0x5D: RdAbsX(); EOR(); break;
-		case 0x59: RdAbsY(); EOR(); break;
-		case 0x41: RdIndX(); EOR(); break;
-		case 0x51: RdIndY(); EOR(); break;
+		case 0x49: RdImd(cpu);  EOR(cpu); break;
+		case 0x45: RdZp(cpu);   EOR(cpu); break;
+		case 0x55: RdZpX(cpu);  EOR(cpu); break;
+		case 0x4D: RdAbs(cpu);  EOR(cpu); break;
+		case 0x5D: RdAbsX(cpu); EOR(cpu); break;
+		case 0x59: RdAbsY(cpu); EOR(cpu); break;
+		case 0x41: RdIndX(cpu); EOR(cpu); break;
+		case 0x51: RdIndY(cpu); EOR(cpu); break;
 
 				   //INC
-		case 0xE6: RdZp();   INC(); MZp();   break;
-		case 0xF6: RdZpX();  INC(); MZpX();  break;
-		case 0xEE: SAbs();   INC(); MAbs();  break;
-		case 0xFE: RdAbsX(); INC(); MAbsX(); break;
+		case 0xE6: RdZp(cpu);   INC(cpu); MZp(cpu);   break;
+		case 0xF6: RdZpX(cpu);  INC(cpu); MZpX(cpu);  break;
+		case 0xEE: SAbs(cpu);   INC(cpu); MAbs(cpu);  break;
+		case 0xFE: RdAbsX(cpu); INC(cpu); MAbsX(cpu); break;
 
 				   //INX
-		case 0xE8: INX(); break;
+		case 0xE8: INX(cpu); break;
 
 				   //INY
-		case 0xC8: INY(); break;
+		case 0xC8: INY(cpu); break;
 
 				   //JMP
-		case 0x4C: SAbs();  JMP(); break;
-		case 0x6C: RdInd(); JMP(); break;
+		case 0x4C: SAbs(cpu);  JMP(cpu); break;
+		case 0x6C: RdInd(cpu); JMP(cpu); break;
 
 				   //JSR
-		case 0x20: JSR(); break;
+		case 0x20: JSR(cpu); break;
 
 				   //LDA
-		case 0xA9: RdImd(); LDA(); break;
-		case 0xA5: RdZp();  LDA(); break;
-		case 0xB5: RdZpX(); LDA(); break;
-		case 0xAD: RdAbs(); LDA(); break;
-		case 0xBD: RdAbsX();LDA(); break;
-		case 0xB9: RdAbsY();LDA(); break;
-		case 0xA1: RdIndX();LDA(); break;
-		case 0xB1: RdIndY();LDA(); break;
+		case 0xA9: RdImd(cpu); LDA(cpu); break;
+		case 0xA5: RdZp(cpu);  LDA(cpu); break;
+		case 0xB5: RdZpX(cpu); LDA(cpu); break;
+		case 0xAD: RdAbs(cpu); LDA(cpu); break;
+		case 0xBD: RdAbsX(cpu);LDA(cpu); break;
+		case 0xB9: RdAbsY(cpu);LDA(cpu); break;
+		case 0xA1: RdIndX(cpu);LDA(cpu); break;
+		case 0xB1: RdIndY(cpu);LDA(cpu); break;
 
 				   //LDX
-		case 0xA2: RdImd(); LDX(); break;
-		case 0xA6: RdZp();  LDX(); break;
-		case 0xB6: RdZpY(); LDX(); break;
-		case 0xAE: RdAbs(); LDX(); break;
-		case 0xBE: RdAbsY();LDX(); break;
+		case 0xA2: RdImd(cpu); LDX(cpu); break;
+		case 0xA6: RdZp(cpu);  LDX(cpu); break;
+		case 0xB6: RdZpY(cpu); LDX(cpu); break;
+		case 0xAE: RdAbs(cpu); LDX(cpu); break;
+		case 0xBE: RdAbsY(cpu);LDX(cpu); break;
 
 				   //LDY
-		case 0xA0: RdImd(); LDY(); break;
-		case 0xA4: RdZp();  LDY(); break;
-		case 0xB4: RdZpX(); LDY(); break;
-		case 0xAC: RdAbs(); LDY(); break;
-		case 0xBC: RdAbsX();LDY(); break;
+		case 0xA0: RdImd(cpu); LDY(cpu); break;
+		case 0xA4: RdZp(cpu);  LDY(cpu); break;
+		case 0xB4: RdZpX(cpu); LDY(cpu); break;
+		case 0xAC: RdAbs(cpu); LDY(cpu); break;
+		case 0xBC: RdAbsX(cpu);LDY(cpu); break;
 
 				   //LSR
-		case 0x4A: RdAcc();  LSR(); WrAcc(); break;
-		case 0x46: RdZp();   LSR(); MZp();   break;
-		case 0x56: RdZpX();  LSR(); MZpX();  break;
-		case 0x4E: SAbs();   LSR(); MAbs();  break;
-		case 0x5E: RdAbsX(); LSR(); MAbsX(); break;
+		case 0x4A: RdAcc(cpu);  LSR(cpu); WrAcc(cpu); break;
+		case 0x46: RdZp(cpu);   LSR(cpu); MZp(cpu);   break;
+		case 0x56: RdZpX(cpu);  LSR(cpu); MZpX(cpu);  break;
+		case 0x4E: SAbs(cpu);   LSR(cpu); MAbs(cpu);  break;
+		case 0x5E: RdAbsX(cpu); LSR(cpu); MAbsX(cpu); break;
 
 
-		case 0xEA:  break;
-					/*    //NOPs
-
-						  case 0x04: case 0x44: case 0x64: PC++; break;
-						  case 0x0C: PC++; PC++; break;
-						  case 0x14: case 0x34: case 0x54: case 0x74: case 0xD4: case 0xF4: PC++; break;
-						  case 0x1A: case 0x3A: case 0x5A: case 0x7A: case 0xDA: case 0xFA: break;
-						  case 0x80: PC++; break;
-						  case 0x1C: case 0x3C: case 0x5C: case 0x7C: case 0xDC: case 0xFC: PC++; PC++; break;
+			//NOP
+		case 0xEA:  cycles = 2; break;
+/*
+		case 0x04: case 0x44: case 0x64:
+			cpu->pc++;
+			break;
+		case 0x0C:
+			cpu->pc += 2;
+			break;
+		case 0x14: case 0x34: case 0x54:
+		case 0x74: case 0xD4: case 0xF4:
+			cpu->pc++;
+			break;
+		case 0x1A: case 0x3A: case 0x5A:
+		case 0x7A: case 0xDA: case 0xFA:
+			break;
+		case 0x80:
+			cpu->pc++;
+			break;
+		case 0x1C: case 0x3C: case 0x5C:
+		case 0x7C: case 0xDC: case 0xFC:
+			cpu->pc += 2;
+			break;
+*/
 					//LAX
-					case 0xa3: RdIndX(); LDA();LDX();break;
-					case 0xA7: RdZp(); LDA(); LDX();break;
-					*/
+		//case 0xa3: RdIndX(cpu); LDA(cpu);LDX(cpu);break;
+		//ase 0xA7: RdZp(cpu); LDA(cpu); LDX(cpu);break;
+					
 
 					//ORA
-		case 0x09: RdImd();  ORA(); break;
-		case 0x05: RdZp();   ORA(); break;
-		case 0x15: RdZpX();  ORA(); break;
-		case 0x0D: RdAbs();  ORA(); break;
-		case 0x1D: RdAbsX(); ORA(); break;
-		case 0x19: RdAbsY(); ORA(); break;
-		case 0x01: RdIndX(); ORA(); break;
-		case 0x11: RdIndY(); ORA(); break;
+		case 0x09: RdImd(cpu);  ORA(cpu); break;
+		case 0x05: RdZp(cpu);   ORA(cpu); break;
+		case 0x15: RdZpX(cpu);  ORA(cpu); break;
+		case 0x0D: RdAbs(cpu);  ORA(cpu); break;
+		case 0x1D: RdAbsX(cpu); ORA(cpu); break;
+		case 0x19: RdAbsY(cpu); ORA(cpu); break;
+		case 0x01: RdIndX(cpu); ORA(cpu); break;
+		case 0x11: RdIndY(cpu); ORA(cpu); break;
 
 				   //PHA
-		case 0x48: PHA(); break;
+		case 0x48: PHA(cpu); break;
 
 				   //PHP
-		case 0x08: PHP(); break;
+		case 0x08: PHP(cpu); break;
 
 				   //PLA
-		case 0x68: PLA(); break;
+		case 0x68: PLA(cpu); break;
 
 				   //PLP
-		case 0x28: PLP(); break;
+		case 0x28: PLP(cpu); break;
 
 				   //ROL
-		case 0x2A: RdAcc();  ROL(); WrAcc(); break;
-		case 0x26: RdZp();   ROL(); MZp();   break;
-		case 0x36: RdZpX();  ROL(); MZpX();  break;
-		case 0x2E: SAbs();   ROL(); MAbs();  break;
-		case 0x3E: RdAbsX(); ROL(); MAbsX(); break;
+		case 0x2A: RdAcc(cpu);  ROL(cpu); WrAcc(cpu); break;
+		case 0x26: RdZp(cpu);   ROL(cpu); MZp(cpu);   break;
+		case 0x36: RdZpX(cpu);  ROL(cpu); MZpX(cpu);  break;
+		case 0x2E: SAbs(cpu);   ROL(cpu); MAbs(cpu);  break;
+		case 0x3E: RdAbsX(cpu); ROL(cpu); MAbsX(cpu); break;
 
 				   //ROR
-		case 0x6A: RdAcc();  ROR(); WrAcc(); break;
-		case 0x66: RdZp();   ROR(); MZp();   break;
-		case 0x76: RdZpX();  ROR(); MZpX();  break;
-		case 0x6E: SAbs();   ROR(); MAbs();  break;
-		case 0x7E: RdAbsX(); ROR(); MAbsX(); break;
+		case 0x6A: RdAcc(cpu);  ROR(cpu); WrAcc(cpu); break;
+		case 0x66: RdZp(cpu);   ROR(cpu); MZp(cpu);   break;
+		case 0x76: RdZpX(cpu);  ROR(cpu); MZpX(cpu);  break;
+		case 0x6E: SAbs(cpu);   ROR(cpu); MAbs(cpu);  break;
+		case 0x7E: RdAbsX(cpu); ROR(cpu); MAbsX(cpu); break;
 
 				   //RTI
-		case 0x40: RTI(); break;
+		case 0x40: RTI(cpu); break;
 
 				   //RTS
-		case 0x60: RTS(); break;
+		case 0x60: RTS(cpu); break;
 
 				   //SBC
-		case 0xE9: RdImd();  SBC(); break;
-		case 0xe5: RdZp();   SBC(); break;
-		case 0xF5: RdZpX();  SBC(); break;
-		case 0xED: RdAbs();  SBC(); break;
-		case 0xFD: RdAbsX(); SBC(); break;
-		case 0xF9: RdAbsY(); SBC(); break;
-		case 0xE1: RdIndX(); SBC(); break;
-		case 0xF1: RdIndY(); SBC(); break;
+		case 0xE9: RdImd(cpu);  SBC(cpu); break;
+		case 0xe5: RdZp(cpu);   SBC(cpu); break;
+		case 0xF5: RdZpX(cpu);  SBC(cpu); break;
+		case 0xED: RdAbs(cpu);  SBC(cpu); break;
+		case 0xFD: RdAbsX(cpu); SBC(cpu); break;
+		case 0xF9: RdAbsY(cpu); SBC(cpu); break;
+		case 0xE1: RdIndX(cpu); SBC(cpu); break;
+		case 0xF1: RdIndY(cpu); SBC(cpu); break;
 
 				   //STA
-		case 0x85: RdZp();   STA(); MZp();   break;
-		case 0x95: RdZpX();  STA(); MZpX();  break;
-		case 0x8D: SAbs();   STA(); MAbs();  break;
-		case 0x9D: RdAbsX(); STA(); MAbsX(); break;
-		case 0x99: RdAbsY(); STA(); MAbsY(); break;
-		case 0x81: RdIndX(); STA(); MIndX(); break;
-		case 0x91: RdIndY(); STA(); MIndY(); break;
-
+		case 0x85: RdZp(cpu);   STA(cpu); MZp(cpu);   break;
+		case 0x95: RdZpX(cpu);  STA(cpu); MZpX(cpu);  break;
+		case 0x8D: SAbs(cpu);   STA(cpu); MAbs(cpu);  break;
+		case 0x9D: RdAbsX(cpu); STA(cpu); MAbsX(cpu); break;
+		case 0x99: RdAbsY(cpu); STA(cpu); MAbsY(cpu); break;
+		case 0x81: RdIndX(cpu); STA(cpu); MIndX(cpu); break;
+		case 0x91: RdIndY(cpu); STA(cpu); MIndY(cpu); break;
 
 				   //STX
-		case 0x86: RdZp();  STX(); MZp();  break;
-		case 0x96: RdZpY(); STX(); MZpY(); break;
-		case 0x8E: SAbs();  STX(); MAbs(); break;
+		case 0x86: RdZp(cpu);  STX(cpu); MZp(cpu);  break;
+		case 0x96: RdZpY(cpu); STX(cpu); MZpY(cpu); break;
+		case 0x8E: SAbs(cpu);  STX(cpu); MAbs(cpu); break;
 
 				   //STY
-		case 0x84: RdZp();  STY(); MZp();  break;
-		case 0x94: RdZpX(); STY(); MZpX(); break;
-		case 0x8C: SAbs();  STY(); MAbs(); break;
+		case 0x84: RdZp(cpu);  STY(cpu); MZp(cpu);  break;
+		case 0x94: RdZpX(cpu); STY(cpu); MZpX(cpu); break;
+		case 0x8C: SAbs(cpu);  STY(cpu); MAbs(cpu); break;
 
 				   //TAX
-		case 0xAA: TAX(); break;
+		case 0xAA: TAX(cpu); break;
 
 				   //TAY
-		case 0xA8: TAY(); break;
+		case 0xA8: TAY(cpu); break;
 
 				   //TSX
-		case 0xBA: TSX(); break;
+		case 0xBA: TSX(cpu); break;
 
 				   //TXA
-		case 0x8A: TXA(); break;
+		case 0x8A: TXA(cpu); break;
 
 				   //TXS
-		case 0x9A: TXS(); break;
+		case 0x9A: TXS(cpu); break;
 
 				   //TYA
-		case 0x98: TYA(); break;
+		case 0x98: TYA(cpu); break;
 
 		default:
-			printf("%.2x \tUnknown OPCode!\n", op);
-			printf("nestest: %.2x\n",RAM[0]);
-			exit(0);
+			printf("%.2X \tUnknown Opcode!\n", op);
+			printf("nestest: %.2X %.2X %.2X %.2X\n", RAM[0], RAM[1], RAM[2], RAM[3]);
+			exit(EXIT_FAILURE);
 	}
 
+	cpu->pc++;
+
+	cpu->cycles += cycles;
 	return cycles;
 }
 
+#include "b6502_ops.h"
+int mos6502_logger(mos6502 *cpu) {
+	int ret = 0;
+	static int lcycles = 0;
+	uint8_t opcode = cpu->ram[cpu->pc];
+	struct op *op = &ops[opcode];
 
+	fprintf(stderr, "%.4X  ", cpu->pc);
 
+	switch(op->bytes) {
+		case 1:
+			fprintf(stderr, "%.2X        ", opcode);
+			break;
+		case 2:
+			fprintf(stderr, "%.2X %.2X     ", opcode, cpu->ram[cpu->pc + 1]);
+			break;
+		case 3:
+			fprintf(stderr, "%.2X %.2X %.2X  ",
+				   	opcode, cpu->ram[cpu->pc + 1], cpu->ram[cpu->pc + 2]);
+	}
 
+	fprintf(stderr, "%s ", op->name);
 
+	switch(op->mode) {
+		case MODE_ABS:
+			fprintf(stderr, "$%.2X%.2X   ", cpu->ram[cpu->pc + 2], cpu->ram[cpu->pc + 1]);
+			break;
+		case MODE_IMD:
+			fprintf(stderr, "#$%.2X    ", cpu->ram[cpu->pc+1]);
+			break;
+		case MODE_REL:
+			fprintf(stderr,"$%.4X   ", cpu->pc + 2 + (signed)cpu->ram[cpu->pc+1]);
+			break;
+		case MODE_IMP:
+			fprintf(stderr, "          ");
+			break;
+		case MODE_ZP:
+			{
+			uint8_t zp = cpu->ram[cpu->pc + 1];
+			fprintf(stderr, "$%.2X = %.2X", zp, cpu->ram[zp]);
+			}
+			break;
+		default:
+			fprintf(stderr, "Unimplemented mode %i\n", op->mode);
+			exit(EXIT_FAILURE);
+			//fprintf(stderr, "%2i        ", op->mode);
+	}
 
+	fprintf(stderr, "\t\t\t\t\tA:%.2X X:%.2X Y:%.2X P:%.2X SP:%.2X CYC:%3i\n",
+			cpu->a, cpu->x, cpu->y, cpu->flags, cpu->sp, lcycles);
+
+	ret = mos6502_doop(cpu);
+
+	lcycles += ret * 3;
+	if (lcycles > 341) {
+		lcycles -= 341;
+	}
+	
+	return ret;
+}

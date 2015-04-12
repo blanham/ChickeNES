@@ -64,6 +64,7 @@ int sdl_init()
 int main(int argc, char *argv[])
 {
 	int ch, scanlines = 0;
+	char *filename = NULL;
 
 	while ((ch = getopt_long(argc, argv, "s:", longopts, NULL)) != -1) {
 		switch (ch) {
@@ -73,9 +74,8 @@ int main(int argc, char *argv[])
 				break;
 		}
 	}
-    char *filename = argv[optind];
 
-    if (filename == NULL) {
+    if ((filename = argv[optind]) == NULL) {
         //This should print usage instead of this error
         fprintf(stderr, "No file specified\n");
         return EXIT_FAILURE;
@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
     if (openconfig()) exit(1);
 
     struct nes {
-        struct cpu {} cpu;
+        mos6502 *cpu;
         struct ppu {} ppu;
         struct apu {} apu;
         struct cart *cart;
@@ -102,8 +102,8 @@ int main(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
-
     //init cpu
+	nes->cpu = mos6502_alloc();
     //init ppu
     //init apu
 
@@ -111,6 +111,7 @@ int main(int argc, char *argv[])
     //(use getopt), other options
 
     //pass cart and options to cpu
+	memcpy(&nes->cpu->ram[0x8000], nes->cart->prg_rom, 0x8000);
 
     //reset cpu
 
@@ -118,34 +119,18 @@ int main(int argc, char *argv[])
 
     bool running = true;
     SDL_Event e;
+    int cycles = 0;
+    int dcycles = 0;
     while (running) {
         SDL_PollEvent(&e);
         if (e.type == SDL_QUIT)
             running = false;
+        dcycles += cycles * nes->cart->multiplier;
+
+		cycles = mos6502_logger(nes->cpu);
     }
 
     return 0;
-}
-
-void printp()
-{
-    printf("P:");
-    if (P & 0x80)printf("N");
-    else printf("n");
-    if (P & 0x40)printf("V");
-    else printf("v");
-    if (P & 0x20)printf("U");
-    else printf("u");
-    if (P & 0x10)printf("B");
-    else printf("b");
-    if (P & 0x08)printf("D");
-    else printf("d");
-    if (P & 0x04)printf("I");
-    else printf("i");
-    if (P & 0x02)printf("Z");
-    else printf("z");
-    if (P & 0x01)printf("C");
-    else printf("c");
 }
 
 int Dcycles;
@@ -185,9 +170,9 @@ int RunCPU(int runto)
     while (CPUcycles > 0)
     {
 
-        int help = DoOP(RAM[PC]);
+        int help = 0;//DoOP(RAM[PC]);
 	//	if(PC>0x9000)printf("PCL: %x\n",PC);
-        PC++;
+      //  PC++;
         Mcycles = 341;
         PPUcycles += (help * multiplier);
 		//printf("PPU: %i\n",PPUcycles);

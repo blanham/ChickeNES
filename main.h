@@ -22,8 +22,6 @@ extern GLuint texture;			// This is a handle to our texture object
 extern GLuint pboIds[2];   
 typedef unsigned short WORD;
 typedef unsigned char BYTE;
-#define DEBUG
-//#define PRNTSTAT
 extern unsigned char *PRG,*CHR,*RAM,VRAM[0x4000],NT[0x1eff], PAL[0xFF],*SPRRAM;;
 extern BYTE *pRAM[16];
 extern uint8_t *pVRAM[8];
@@ -43,7 +41,6 @@ extern int i;
 extern int FirstREAD;
 extern SDL_Surface* screen;
 extern SDL_Surface* buffer;
-extern SDL_Rect g_SrcRect,g_DstRect;
 void nmi();
 extern BYTE region;
 
@@ -53,7 +50,6 @@ BYTE ReadRAM(WORD addr);
 //function prototypes
 
 int OpenROM(char *filename);
-int OpenUNIF(char *filename, FILE *unif);
 void ReleaseROM();
 void ReleaseRAM();
 void PrintRAM();
@@ -63,7 +59,6 @@ BYTE ReadRAM(WORD addr);
 BYTE ReadIO(WORD addr);
 void OpenRAM();
 void printp();
-int initSDL(void);
 void initCPU(void);
 void RunEMU(int scanlines);
 int RunCPU(int scanlines);
