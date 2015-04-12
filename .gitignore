@@ -1,0 +1,8 @@
+.*.sw*
+types*
+tags
+*.pyc
+*.o
+bnes
+chickenes
+roms
