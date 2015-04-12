@@ -8,6 +8,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #include "main.h"
 #include "b6502.h"
@@ -45,12 +46,6 @@ mos6502 *mos6502_alloc()
 	ret->pc = 0xC000;
 	ret->ram = RAM;
 	return ret;
-}
-
-
-void cpu_reset(mos6502 *cpu)
-{
-
 }
 
 void printp(mos6502 *cpu)
@@ -435,224 +430,17 @@ void BIT(mos6502 *cpu) {
 	DPRINTF("\tBIT $%.2X = #$%.2X", RAM[cpu->pc], val);
 }
 
-//Branches
-
-//BCC
-void BCC(mos6502 *cpu) {
-
-	if ((RAM[cpu->pc+1] & 0x80)) {
-		pSigned = (signed char)RAM[cpu->pc+1];
-	} else {
-		pSigned = RAM[cpu->pc+1];
-	}
-
-	DPRINTF("%.2X %.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
-	DPRINTF("\tBCC");
-	DPRINTF(" $%.4x", (cpu->pc + 2) + pSigned);
-
-	if ((cpu->flags & 0x01)==0){
-		cpu->pc = cpu->pc + pSigned + 1;
-
-		DPRINTF("Branch!");
-
-	} else {
-		cpu->pc++;
-	}
-
+void mos6502_branch(mos6502 *cpu, enum mos6502_flags flag, bool condition) {
 	cycles = 2;
-}
-
-//BCS
-void BCS(mos6502 *cpu) {
-	//converts unsigned to signed
-	if ((RAM[cpu->pc+1] & 0x80)) {
-		pSigned = RAM[cpu->pc+1] - 0x100;
-	} else
-		pSigned = RAM[cpu->pc+1];
-
-	DPRINTF("%.2X %.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
-	DPRINTF("\tBCS");
-	DPRINTF(" $%.4x", (cpu->pc + 2) + pSigned);
-
-	if (cpu->flags & 0x01) {
-		cpu->pc = cpu->pc + pSigned;
-		cpu->pc++;
-
-		DPRINTF("Branch!");
-
-	} else
-		cpu->pc++;
-
-	cycles = 2;
-}
-
-//BEQ
-void BEQ(mos6502 *cpu) {
-
-	if ((RAM[cpu->pc+1] & 0x80)) {
-		pSigned = RAM[cpu->pc+1] - 0x100;
-	} else pSigned = RAM[cpu->pc+1];
-
-
-	DPRINTF("%.2X %.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
-	DPRINTF("\tBEQ");
-
-	DPRINTF(" $%.4x", (cpu->pc + 2) + pSigned);
-
-
-	if (cpu->flags & 0x02) {
-		cpu->pc = cpu->pc + pSigned;
-		cycles = 3;
-
-		DPRINTF("Branch!");
-
-		cpu->pc++;
-	} else cpu->pc++;
-
-	cycles = 2;
-}
-
-//BMI
-void BMI(mos6502 *cpu) {
-
-	cycles = 2;
-	//converts unsigned to signed
-
-	if ((RAM[cpu->pc+1] & 0x80)) {
-		pSigned = RAM[cpu->pc+1] - 0x100;
-	} else
-		pSigned = RAM[cpu->pc+1];
-
-
-	DPRINTF("%.2X %.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
-	DPRINTF("\tBMI");
-
-	DPRINTF(" $%.4x", (cpu->pc + 2) + pSigned);
-
-
-	if ((RAM[cpu->pc+1]>>8) != (cpu->pc>>8))
+	if (!(cpu->flags & flag) ^ condition) {
 		cycles++;
-
-	if ((cpu->flags & 0x80)) {
-
-		DPRINTF("Branch!");
-
-		cpu->pc = cpu->pc + pSigned;
-		++cycles;
-		cpu->pc++;
-	} else
-
-		cpu->pc++;
-
-}
-
-//BNE
-void BNE(mos6502 *cpu) {
-
-	cycles =2 ;
-	//converts unsigned to signed
-
-	if ((RAM[cpu->pc+1] & 0x80)) {
-		pSigned = RAM[cpu->pc+1] - 0x100;
-	} else
-		pSigned = RAM[cpu->pc+1];
-
-
-	DPRINTF("%.2X %.2X %.2X", RAM[cpu->pc], RAM[cpu->pc+1], RAM[cpu->pc+2]);
-	DPRINTF("\tBNE");
-
-	DPRINTF(" $%.4x", (cpu->pc + 2) + pSigned);
-
-
-	if ((RAM[cpu->pc+1]>>8) != (cpu->pc>>8))
-		cycles = cycles + 2;
-
-	if ((cpu->flags & 0x02)==0) {
-
-		DPRINTF("Branch!");
-
-
-		cpu->pc = cpu->pc + pSigned;
-		++cycles;
-		cpu->pc++;
-	} else
-
-		cpu->pc++;
-
-}
-
-//BPL
-void BPL(mos6502 *cpu) {
-
-	//converts unsigned to signed
-	if ((RAM[cpu->pc+1] & 0x80))pSigned = (signed char)RAM[cpu->pc+1];
-	else pSigned = RAM[cpu->pc+1];
-
-	cycles = 2;
-
-
-	DPRINTF("%.2X %.2X \tBPL", RAM[cpu->pc], RAM[cpu->pc+1]);
-
-	DPRINTF(" $%.4x", cpu->pc + 2 + pSigned);
-
-
-	if (cpu->flags & 0x80) {
-
-		cpu->pc++;
-	} else {
-		cpu->pc = cpu->pc + 2 + pSigned -1;
-
-
-		DPRINTF("Branch!");
-
+		uint8_t page = (cpu->pc >> 8) & 0xFF;
+		cpu->pc += (signed)cpu->ram[cpu->pc+1];
+		if (page != ((cpu->pc >> 8) & 0xFF)) {
+			cycles += 2;
+		}
 	}
-}
-
-//BVC
-void BVC(mos6502 *cpu) {
-
-	if ((RAM[cpu->pc+1] & 0x80))pSigned = (signed char)RAM[cpu->pc+1];
-	else pSigned = RAM[cpu->pc+1];
-
-	cycles = 2;
-
-
-	DPRINTF("%.2X %.2X \tBVC", RAM[cpu->pc], RAM[cpu->pc+1]);
-
-	DPRINTF(" $%.4x", cpu->pc + 2 + pSigned);
-
-
-	if (cpu->flags & 0x40) {
-		cpu->pc++;
-	} else {
-		cpu->pc = cpu->pc + 2 + pSigned -1;
-
-		DPRINTF("Branch!");
-	}
-}
-
-//BVS
-void BVS(mos6502 *cpu) {
-
-	//converts unsigned to signed
-	if ((RAM[cpu->pc+1] & 0x80))pSigned = (signed char)RAM[cpu->pc+1];
-	else pSigned = RAM[cpu->pc+1];
-
-	cycles = 2;
-
-
-	DPRINTF("%.2X %.2X \tBVS", RAM[cpu->pc], RAM[cpu->pc+1]);
-	DPRINTF(" $%.4x", cpu->pc + 2 + pSigned);
-
-	if (cpu->flags & 0x40) {
-		cpu->pc = cpu->pc + 2 + pSigned -1;
-
-		DPRINTF("Branch!");
-
-	} else {
-		cpu->pc++;
-	}
-
+	cpu->pc++;
 }
 
 //CMP
@@ -1001,10 +789,6 @@ void BRK(mos6502 *cpu) {
 
 int mos6502_doop(mos6502 *cpu) {
 	cycles = 0;
-
-	//fprintf(stderr, "nestest: %.2X %.2X %.2X %.2X ", RAM[0], RAM[1], RAM[2], RAM[3]);
-	DPRINTF("%.4X  ", cpu->pc);
-
 	uint8_t op = cpu->ram[cpu->pc];
 
 	switch (op) {
@@ -1046,14 +830,14 @@ int mos6502_doop(mos6502 *cpu) {
 		case 0x1E: RdAbsX(cpu);ASL(cpu); MAbsX(cpu); break;
 
 			//Branches
-		case 0x90: BCC(cpu); break;
-		case 0xB0: BCS(cpu); break;
-		case 0xF0: BEQ(cpu); break;
-		case 0x30: BMI(cpu); break;
-		case 0xD0: BNE(cpu); break;
-		case 0x10: BPL(cpu); break;
-		case 0x50: BVC(cpu); break;
-		case 0x70: BVS(cpu); break;
+		case 0x90: mos6502_branch(cpu, FLAG_CARRY, false);	break; //BCC
+		case 0xB0: mos6502_branch(cpu, FLAG_CARRY, true);	break; //BCS
+		case 0xF0: mos6502_branch(cpu, FLAG_ZERO, true);	break;
+		case 0x30: mos6502_branch(cpu, FLAG_NEG, true);		break;
+		case 0xD0: mos6502_branch(cpu, FLAG_ZERO, false);	break;
+		case 0x10: mos6502_branch(cpu, FLAG_NEG, false);	break;
+		case 0x50: mos6502_branch(cpu, FLAG_OVER, false);	break;
+		case 0x70: mos6502_branch(cpu, FLAG_OVER, true);	break;
 
 			//BIT
 		case 0x24: RdZp(cpu);  BIT(cpu); break;
