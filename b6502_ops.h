@@ -18,261 +18,262 @@ struct op {
 	char *name;
 	int mode;
 	int bytes;
+	int modify;
 } ops[] = {
-	{"BRK", MODE_IMP, 1}, //0x0, 0
-	{"ORA", MODE_INDX, 2}, //0x1, 1
-	{"STP", MODE_UNKNOWN, 0}, //0x2, 2
-	{"SLO", MODE_UNKNOWN, 0}, //0x3, 3
-	{"NOP", MODE_UNKNOWN, 0}, //0x4, 4
-	{"ORA", MODE_ZP, 2}, //0x5, 5
-	{"ASL", MODE_ZP, 2}, //0x6, 6
-	{"SLO", MODE_UNKNOWN, 0}, //0x7, 7
-	{"PHP", MODE_IMP, 1}, //0x8, 8
-	{"ORA", MODE_IMD, 2}, //0x9, 9
-	{"ASL", MODE_ACC, 1}, //0xA, 10
-	{"ANC", MODE_UNKNOWN, 0}, //0xB, 11
-	{"NOP", MODE_UNKNOWN, 0}, //0xC, 12
-	{"ORA", MODE_ABS, 3}, //0xD, 13
-	{"ASL", MODE_ABS, 3}, //0xE, 14
-	{"SLO", MODE_UNKNOWN, 0}, //0xF, 15
-	{"BPL", MODE_REL, 2}, //0x10, 16
-	{"ORA", MODE_INDY, 2}, //0x11, 17
-	{"STP", MODE_UNKNOWN, 0}, //0x12, 18
-	{"SLO", MODE_UNKNOWN, 0}, //0x13, 19
-	{"NOP", MODE_UNKNOWN, 0}, //0x14, 20
-	{"ORA", MODE_ZPX, 2}, //0x15, 21
-	{"ASL", MODE_ZPX, 2}, //0x16, 22
-	{"SLO", MODE_UNKNOWN, 0}, //0x17, 23
-	{"CLC", MODE_IMP, 1}, //0x18, 24
-	{"ORA", MODE_ABSY, 3}, //0x19, 25
-	{"NOP", MODE_UNKNOWN, 0}, //0x1A, 26
-	{"SLO", MODE_UNKNOWN, 0}, //0x1B, 27
-	{"NOP", MODE_UNKNOWN, 0}, //0x1C, 28
-	{"ORA", MODE_ABSX, 3}, //0x1D, 29
-	{"ASL", MODE_ABSX, 3}, //0x1E, 30
-	{"SLO", MODE_UNKNOWN, 0}, //0x1F, 31
-	{"JSR", MODE_ABS, 3}, //0x20, 32
-	{"AND", MODE_INDX, 2}, //0x21, 33
-	{"STP", MODE_UNKNOWN, 0}, //0x22, 34
-	{"RLA", MODE_UNKNOWN, 0}, //0x23, 35
-	{"BIT", MODE_ZP, 2}, //0x24, 36
-	{"AND", MODE_ZP, 2}, //0x25, 37
-	{"ROL", MODE_ZP, 2}, //0x26, 38
-	{"RLA", MODE_UNKNOWN, 0}, //0x27, 39
-	{"PLP", MODE_IMP, 1}, //0x28, 40
-	{"AND", MODE_IMD, 2}, //0x29, 41
-	{"ROL", MODE_ACC, 1}, //0x2A, 42
-	{"ANC", MODE_UNKNOWN, 0}, //0x2B, 43
-	{"BIT", MODE_ABS, 3}, //0x2C, 44
-	{"AND", MODE_ABS, 3}, //0x2D, 45
-	{"ROL", MODE_ABS, 3}, //0x2E, 46
-	{"RLA", MODE_UNKNOWN, 0}, //0x2F, 47
-	{"BMI", MODE_REL, 2}, //0x30, 48
-	{"AND", MODE_INDY, 2}, //0x31, 49
-	{"STP", MODE_UNKNOWN, 0}, //0x32, 50
-	{"RLA", MODE_UNKNOWN, 0}, //0x33, 51
-	{"NOP", MODE_UNKNOWN, 0}, //0x34, 52
-	{"AND", MODE_ZPX, 2}, //0x35, 53
-	{"ROL", MODE_ZPX, 2}, //0x36, 54
-	{"RLA", MODE_UNKNOWN, 0}, //0x37, 55
-	{"SEC", MODE_IMP, 1}, //0x38, 56
-	{"AND", MODE_ABSY, 3}, //0x39, 57
-	{"NOP", MODE_UNKNOWN, 0}, //0x3A, 58
-	{"RLA", MODE_UNKNOWN, 0}, //0x3B, 59
-	{"NOP", MODE_UNKNOWN, 0}, //0x3C, 60
-	{"AND", MODE_ABSX, 3}, //0x3D, 61
-	{"ROL", MODE_ABSX, 3}, //0x3E, 62
-	{"RLA", MODE_UNKNOWN, 0}, //0x3F, 63
-	{"RTI", MODE_IMP, 1}, //0x40, 64
-	{"EOR", MODE_INDX, 2}, //0x41, 65
-	{"STP", MODE_UNKNOWN, 0}, //0x42, 66
-	{"SRE", MODE_UNKNOWN, 0}, //0x43, 67
-	{"NOP", MODE_UNKNOWN, 0}, //0x44, 68
-	{"EOR", MODE_ZP, 2}, //0x45, 69
-	{"LSR", MODE_ZP, 2}, //0x46, 70
-	{"SRE", MODE_UNKNOWN, 0}, //0x47, 71
-	{"PHA", MODE_IMP, 1}, //0x48, 72
-	{"EOR", MODE_IMD, 2}, //0x49, 73
-	{"LSR", MODE_ACC, 1}, //0x4A, 74
-	{"ALR", MODE_UNKNOWN, 0}, //0x4B, 75
-	{"JMP", MODE_ABS, 3}, //0x4C, 76
-	{"EOR", MODE_ABS, 3}, //0x4D, 77
-	{"LSR", MODE_ABS, 3}, //0x4E, 78
-	{"SRE", MODE_UNKNOWN, 0}, //0x4F, 79
-	{"BVC", MODE_REL, 2}, //0x50, 80
-	{"EOR", MODE_INDY, 2}, //0x51, 81
-	{"STP", MODE_UNKNOWN, 0}, //0x52, 82
-	{"SRE", MODE_UNKNOWN, 0}, //0x53, 83
-	{"NOP", MODE_UNKNOWN, 0}, //0x54, 84
-	{"EOR", MODE_ZPX, 2}, //0x55, 85
-	{"LSR", MODE_ZPX, 2}, //0x56, 86
-	{"SRE", MODE_UNKNOWN, 0}, //0x57, 87
-	{"CLI", MODE_IMP, 1}, //0x58, 88
-	{"EOR", MODE_ABSY, 3}, //0x59, 89
-	{"NOP", MODE_UNKNOWN, 0}, //0x5A, 90
-	{"SRE", MODE_UNKNOWN, 0}, //0x5B, 91
-	{"NOP", MODE_UNKNOWN, 0}, //0x5C, 92
-	{"EOR", MODE_ABSX, 3}, //0x5D, 93
-	{"LSR", MODE_ABSX, 3}, //0x5E, 94
-	{"SRE", MODE_UNKNOWN, 0}, //0x5F, 95
-	{"RTS", MODE_IMP, 1}, //0x60, 96
-	{"ADC", MODE_INDX, 2}, //0x61, 97
-	{"STP", MODE_UNKNOWN, 0}, //0x62, 98
-	{"RRA", MODE_UNKNOWN, 0}, //0x63, 99
-	{"NOP", MODE_UNKNOWN, 0}, //0x64, 100
-	{"ADC", MODE_ZP, 2}, //0x65, 101
-	{"ROR", MODE_ZP, 2}, //0x66, 102
-	{"RRA", MODE_UNKNOWN, 0}, //0x67, 103
-	{"PLA", MODE_IMP, 1}, //0x68, 104
-	{"ADC", MODE_IMD, 2}, //0x69, 105
-	{"ROR", MODE_ACC, 1}, //0x6A, 106
-	{"ARR", MODE_UNKNOWN, 0}, //0x6B, 107
-	{"JMP", MODE_IND, 3}, //0x6C, 108
-	{"ADC", MODE_ABS, 3}, //0x6D, 109
-	{"ROR", MODE_ABS, 3}, //0x6E, 110
-	{"RRA", MODE_UNKNOWN, 0}, //0x6F, 111
-	{"BVS", MODE_REL, 2}, //0x70, 112
-	{"ADC", MODE_INDY, 2}, //0x71, 113
-	{"STP", MODE_UNKNOWN, 0}, //0x72, 114
-	{"RRA", MODE_UNKNOWN, 0}, //0x73, 115
-	{"NOP", MODE_UNKNOWN, 0}, //0x74, 116
-	{"ADC", MODE_ZPX, 2}, //0x75, 117
-	{"ROR", MODE_ZPX, 2}, //0x76, 118
-	{"RRA", MODE_UNKNOWN, 0}, //0x77, 119
-	{"SEI", MODE_IMP, 1}, //0x78, 120
-	{"ADC", MODE_ABSY, 3}, //0x79, 121
-	{"NOP", MODE_UNKNOWN, 0}, //0x7A, 122
-	{"RRA", MODE_UNKNOWN, 0}, //0x7B, 123
-	{"NOP", MODE_UNKNOWN, 0}, //0x7C, 124
-	{"ADC", MODE_ABSX, 3}, //0x7D, 125
-	{"ROR", MODE_ABSX, 3}, //0x7E, 126
-	{"RRA", MODE_UNKNOWN, 0}, //0x7F, 127
-	{"NOP", MODE_UNKNOWN, 0}, //0x80, 128
-	{"STA", MODE_INDX, 2}, //0x81, 129
-	{"NOP", MODE_UNKNOWN, 0}, //0x82, 130
-	{"SAX", MODE_UNKNOWN, 0}, //0x83, 131
-	{"STY", MODE_ZP, 2}, //0x84, 132
-	{"STA", MODE_ZP, 2}, //0x85, 133
-	{"STX", MODE_ZP, 2}, //0x86, 134
-	{"SAX", MODE_UNKNOWN, 0}, //0x87, 135
-	{"DEY", MODE_IMP, 1}, //0x88, 136
-	{"NOP", MODE_UNKNOWN, 0}, //0x89, 137
-	{"TXA", MODE_IMP, 1}, //0x8A, 138
-	{"XAA", MODE_UNKNOWN, 0}, //0x8B, 139
-	{"STY", MODE_ABS, 3}, //0x8C, 140
-	{"STA", MODE_ABS, 3}, //0x8D, 141
-	{"STX", MODE_ABS, 3}, //0x8E, 142
-	{"SAX", MODE_UNKNOWN, 0}, //0x8F, 143
-	{"BCC", MODE_REL, 2}, //0x90, 144
-	{"STA", MODE_INDY, 2}, //0x91, 145
-	{"STP", MODE_UNKNOWN, 0}, //0x92, 146
-	{"AHX", MODE_UNKNOWN, 0}, //0x93, 147
-	{"STY", MODE_ZPX, 2}, //0x94, 148
-	{"STA", MODE_ZPX, 2}, //0x95, 149
-	{"STX", MODE_ZPY, 2}, //0x96, 150
-	{"SAX", MODE_UNKNOWN, 0}, //0x97, 151
-	{"TYA", MODE_IMP, 1}, //0x98, 152
-	{"STA", MODE_ABSY, 3}, //0x99, 153
-	{"TXS", MODE_IMP, 1}, //0x9A, 154
-	{"TAS", MODE_IMP, 1}, //0x9B, 155
-	{"SHY", MODE_UNKNOWN, 0}, //0x9C, 156
-	{"STA", MODE_ABSX, 3}, //0x9D, 157
-	{"SHX", MODE_UNKNOWN, 0}, //0x9E, 158
-	{"AHX", MODE_UNKNOWN, 0}, //0x9F, 159
-	{"LDY", MODE_IMD, 2}, //0xA0, 160
-	{"LDA", MODE_INDX, 2}, //0xA1, 161
-	{"LDX", MODE_IMD, 2}, //0xA2, 162
-	{"LAX", MODE_UNKNOWN, 0}, //0xA3, 163
-	{"LDY", MODE_ZP, 2}, //0xA4, 164
-	{"LDA", MODE_ZP, 2}, //0xA5, 165
-	{"LDX", MODE_ZP, 2}, //0xA6, 166
-	{"LAX", MODE_UNKNOWN, 0}, //0xA7, 167
-	{"TAY", MODE_IMP, 1}, //0xA8, 168
-	{"LDA", MODE_IMD, 2}, //0xA9, 169
-	{"TAX", MODE_IMP, 1}, //0xAA, 170
-	{"LAX", MODE_UNKNOWN, 0}, //0xAB, 171
-	{"LDY", MODE_ABS, 3}, //0xAC, 172
-	{"LDA", MODE_ABS, 3}, //0xAD, 173
-	{"LDX", MODE_ABS, 3}, //0xAE, 174
-	{"LAX", MODE_UNKNOWN, 0}, //0xAF, 175
-	{"BCS", MODE_REL, 2}, //0xB0, 176
-	{"LDA", MODE_INDY, 2}, //0xB1, 177
-	{"STP", MODE_UNKNOWN, 0}, //0xB2, 178
-	{"LAX", MODE_UNKNOWN, 0}, //0xB3, 179
-	{"LDY", MODE_ZPX, 2}, //0xB4, 180
-	{"LDA", MODE_ZPX, 2}, //0xB5, 181
-	{"LDX", MODE_ZPY, 2}, //0xB6, 182
-	{"LAX", MODE_UNKNOWN, 0}, //0xB7, 183
-	{"CLV", MODE_IMP, 1}, //0xB8, 184
-	{"LDA", MODE_ABSY, 3}, //0xB9, 185
-	{"TSX", MODE_IMP, 1}, //0xBA, 186
-	{"LAS", MODE_UNKNOWN, 0}, //0xBB, 187
-	{"LDY", MODE_ABSX, 3}, //0xBC, 188
-	{"LDA", MODE_ABSX, 3}, //0xBD, 189
-	{"LDX", MODE_ABSY, 3}, //0xBE, 190
-	{"LAX", MODE_UNKNOWN, 0}, //0xBF, 191
-	{"CPY", MODE_IMD, 2}, //0xC0, 192
-	{"CMP", MODE_INDX, 2}, //0xC1, 193
-	{"NOP", MODE_UNKNOWN, 0}, //0xC2, 194
-	{"DCP", MODE_UNKNOWN, 0}, //0xC3, 195
-	{"CPY", MODE_ZP, 2}, //0xC4, 196
-	{"CMP", MODE_ZP, 2}, //0xC5, 197
-	{"DEC", MODE_ZP, 2}, //0xC6, 198
-	{"DCP", MODE_UNKNOWN, 0}, //0xC7, 199
-	{"INY", MODE_IMP, 1}, //0xC8, 200
-	{"CMP", MODE_IMD, 2}, //0xC9, 201
-	{"DEX", MODE_IMP, 1}, //0xCA, 202
-	{"AXS", MODE_UNKNOWN, 0}, //0xCB, 203
-	{"CPY", MODE_ABS, 3}, //0xCC, 204
-	{"CMP", MODE_ABS, 3}, //0xCD, 205
-	{"DEC", MODE_ABS, 3}, //0xCE, 206
-	{"DCP", MODE_UNKNOWN, 0}, //0xCF, 207
-	{"BNE", MODE_REL, 2}, //0xD0, 208
-	{"CMP", MODE_INDY, 2}, //0xD1, 209
-	{"STP", MODE_UNKNOWN, 0}, //0xD2, 210
-	{"DCP", MODE_UNKNOWN, 0}, //0xD3, 211
-	{"NOP", MODE_UNKNOWN, 0}, //0xD4, 212
-	{"CMP", MODE_ZPX, 2}, //0xD5, 213
-	{"DEC", MODE_ZPX, 2}, //0xD6, 214
-	{"DCP", MODE_UNKNOWN, 0}, //0xD7, 215
-	{"CLD", MODE_IMP, 1}, //0xD8, 216
-	{"CMP", MODE_ABSY, 3}, //0xD9, 217
-	{"NOP", MODE_UNKNOWN, 0}, //0xDA, 218
-	{"DCP", MODE_UNKNOWN, 0}, //0xDB, 219
-	{"NOP", MODE_UNKNOWN, 0}, //0xDC, 220
-	{"CMP", MODE_ABSX, 3}, //0xDD, 221
-	{"DEC", MODE_ABSX, 3}, //0xDE, 222
-	{"DCP", MODE_UNKNOWN, 0}, //0xDF, 223
-	{"CPX", MODE_IMD, 2}, //0xE0, 224
-	{"SBC", MODE_INDX, 2}, //0xE1, 225
-	{"NOP", MODE_UNKNOWN, 0}, //0xE2, 226
-	{"ISC", MODE_UNKNOWN, 0}, //0xE3, 227
-	{"CPX", MODE_ZP, 2}, //0xE4, 228
-	{"SBC", MODE_ZP, 2}, //0xE5, 229
-	{"INC", MODE_ZP, 2}, //0xE6, 230
-	{"ISC", MODE_UNKNOWN, 0}, //0xE7, 231
-	{"INX", MODE_IMP, 1}, //0xE8, 232
-	{"SBC", MODE_IMD, 2}, //0xE9, 233
-	{"NOP", MODE_IMP, 1}, //0xEA, 234
-	{"SBC", MODE_UNKNOWN, 0}, //0xEB, 235
-	{"CPX", MODE_ABS, 3}, //0xEC, 236
-	{"SBC", MODE_ABS, 3}, //0xED, 237
-	{"INC", MODE_ABS, 3}, //0xEE, 238
-	{"ISC", MODE_UNKNOWN, 0}, //0xEF, 239
-	{"BEQ", MODE_REL, 2}, //0xF0, 240
-	{"SBC", MODE_INDY, 2}, //0xF1, 241
-	{"STP", MODE_UNKNOWN, 0}, //0xF2, 242
-	{"ISC", MODE_UNKNOWN, 0}, //0xF3, 243
-	{"NOP", MODE_UNKNOWN, 0}, //0xF4, 244
-	{"SBC", MODE_ZPX, 2}, //0xF5, 245
-	{"INC", MODE_ZPX, 2}, //0xF6, 246
-	{"ISC", MODE_UNKNOWN, 0}, //0xF7, 247
-	{"SED", MODE_IMP, 1}, //0xF8, 248
-	{"SBC", MODE_ABSY, 3}, //0xF9, 249
-	{"NOP", MODE_UNKNOWN, 0}, //0xFA, 250
-	{"ISC", MODE_UNKNOWN, 0}, //0xFB, 251
-	{"NOP", MODE_UNKNOWN, 0}, //0xFC, 252
-	{"SBC", MODE_ABSX, 3}, //0xFD, 253
-	{"INC", MODE_ABSX, 3}, //0xFE, 254
-	{"ISC", MODE_UNKNOWN, 0}, //0xFF, 255
+	{"BRK", MODE_IMP, 1, 0}, //0x0, 0
+	{"ORA", MODE_INDX, 2, 0}, //0x1, 1
+	{"STP", MODE_UNKNOWN, 0, 0}, //0x2, 2
+	{"SLO", MODE_UNKNOWN, 0, 0}, //0x3, 3
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x4, 4
+	{"ORA", MODE_ZP, 2, 0}, //0x5, 5
+	{"ASL", MODE_ZP, 2, 0}, //0x6, 6
+	{"SLO", MODE_UNKNOWN, 0, 0}, //0x7, 7
+	{"PHP", MODE_IMP, 1, 0}, //0x8, 8
+	{"ORA", MODE_IMD, 2, 0}, //0x9, 9
+	{"ASL", MODE_ACC, 1, 0}, //0xA, 10
+	{"ANC", MODE_UNKNOWN, 0, 0}, //0xB, 11
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0xC, 12
+	{"ORA", MODE_ABS, 3, 1}, //0xD, 13
+	{"ASL", MODE_ABS, 3, 1}, //0xE, 14
+	{"SLO", MODE_UNKNOWN, 0, 0}, //0xF, 15
+	{"BPL", MODE_REL, 2, 0}, //0x10, 16
+	{"ORA", MODE_INDY, 2, 0}, //0x11, 17
+	{"STP", MODE_UNKNOWN, 0, 0}, //0x12, 18
+	{"SLO", MODE_UNKNOWN, 0, 0}, //0x13, 19
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x14, 20
+	{"ORA", MODE_ZPX, 2, 0}, //0x15, 21
+	{"ASL", MODE_ZPX, 2, 0}, //0x16, 22
+	{"SLO", MODE_UNKNOWN, 0, 0}, //0x17, 23
+	{"CLC", MODE_IMP, 1, 0}, //0x18, 24
+	{"ORA", MODE_ABSY, 3, 0}, //0x19, 25
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x1A, 26
+	{"SLO", MODE_UNKNOWN, 0, 0}, //0x1B, 27
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x1C, 28
+	{"ORA", MODE_ABSX, 3, 0}, //0x1D, 29
+	{"ASL", MODE_ABSX, 3, 0}, //0x1E, 30
+	{"SLO", MODE_UNKNOWN, 0, 0}, //0x1F, 31
+	{"JSR", MODE_ABS, 3, 0}, //0x20, 32
+	{"AND", MODE_INDX, 2, 0}, //0x21, 33
+	{"STP", MODE_UNKNOWN, 0, 0}, //0x22, 34
+	{"RLA", MODE_UNKNOWN, 0, 0}, //0x23, 35
+	{"BIT", MODE_ZP, 2, 0}, //0x24, 36
+	{"AND", MODE_ZP, 2, 0}, //0x25, 37
+	{"ROL", MODE_ZP, 2, 0}, //0x26, 38
+	{"RLA", MODE_UNKNOWN, 0, 0}, //0x27, 39
+	{"PLP", MODE_IMP, 1, 0}, //0x28, 40
+	{"AND", MODE_IMD, 2, 0}, //0x29, 41
+	{"ROL", MODE_ACC, 1, 0}, //0x2A, 42
+	{"ANC", MODE_UNKNOWN, 0, 0}, //0x2B, 43
+	{"BIT", MODE_ABS, 3, 1}, //0x2C, 44
+	{"AND", MODE_ABS, 3, 1}, //0x2D, 45
+	{"ROL", MODE_ABS, 3, 1}, //0x2E, 46
+	{"RLA", MODE_UNKNOWN, 0, 0}, //0x2F, 47
+	{"BMI", MODE_REL, 2, 0}, //0x30, 48
+	{"AND", MODE_INDY, 2, 0}, //0x31, 49
+	{"STP", MODE_UNKNOWN, 0, 0}, //0x32, 50
+	{"RLA", MODE_UNKNOWN, 0, 0}, //0x33, 51
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x34, 52
+	{"AND", MODE_ZPX, 2, 0}, //0x35, 53
+	{"ROL", MODE_ZPX, 2, 0}, //0x36, 54
+	{"RLA", MODE_UNKNOWN, 0, 0}, //0x37, 55
+	{"SEC", MODE_IMP, 1, 0}, //0x38, 56
+	{"AND", MODE_ABSY, 3, 0}, //0x39, 57
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x3A, 58
+	{"RLA", MODE_UNKNOWN, 0, 0}, //0x3B, 59
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x3C, 60
+	{"AND", MODE_ABSX, 3, 0}, //0x3D, 61
+	{"ROL", MODE_ABSX, 3, 0}, //0x3E, 62
+	{"RLA", MODE_UNKNOWN, 0, 0}, //0x3F, 63
+	{"RTI", MODE_IMP, 1, 0}, //0x40, 64
+	{"EOR", MODE_INDX, 2, 0}, //0x41, 65
+	{"STP", MODE_UNKNOWN, 0, 0}, //0x42, 66
+	{"SRE", MODE_UNKNOWN, 0, 0}, //0x43, 67
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x44, 68
+	{"EOR", MODE_ZP, 2, 0}, //0x45, 69
+	{"LSR", MODE_ZP, 2, 0}, //0x46, 70
+	{"SRE", MODE_UNKNOWN, 0, 0}, //0x47, 71
+	{"PHA", MODE_IMP, 1, 0}, //0x48, 72
+	{"EOR", MODE_IMD, 2, 0}, //0x49, 73
+	{"LSR", MODE_ACC, 1, 0}, //0x4A, 74
+	{"ALR", MODE_UNKNOWN, 0, 0}, //0x4B, 75
+	{"JMP", MODE_ABS, 3, 0}, //0x4C, 76
+	{"EOR", MODE_ABS, 3, 1}, //0x4D, 77
+	{"LSR", MODE_ABS, 3, 1}, //0x4E, 78
+	{"SRE", MODE_UNKNOWN, 0, 0}, //0x4F, 79
+	{"BVC", MODE_REL, 2, 0}, //0x50, 80
+	{"EOR", MODE_INDY, 2, 0}, //0x51, 81
+	{"STP", MODE_UNKNOWN, 0, 0}, //0x52, 82
+	{"SRE", MODE_UNKNOWN, 0, 0}, //0x53, 83
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x54, 84
+	{"EOR", MODE_ZPX, 2, 0}, //0x55, 85
+	{"LSR", MODE_ZPX, 2, 0}, //0x56, 86
+	{"SRE", MODE_UNKNOWN, 0, 0}, //0x57, 87
+	{"CLI", MODE_IMP, 1, 0}, //0x58, 88
+	{"EOR", MODE_ABSY, 3, 0}, //0x59, 89
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x5A, 90
+	{"SRE", MODE_UNKNOWN, 0, 0}, //0x5B, 91
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x5C, 92
+	{"EOR", MODE_ABSX, 3, 0}, //0x5D, 93
+	{"LSR", MODE_ABSX, 3, 0}, //0x5E, 94
+	{"SRE", MODE_UNKNOWN, 0, 0}, //0x5F, 95
+	{"RTS", MODE_IMP, 1, 0}, //0x60, 96
+	{"ADC", MODE_INDX, 2, 0}, //0x61, 97
+	{"STP", MODE_UNKNOWN, 0, 0}, //0x62, 98
+	{"RRA", MODE_UNKNOWN, 0, 0}, //0x63, 99
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x64, 100
+	{"ADC", MODE_ZP, 2, 0}, //0x65, 101
+	{"ROR", MODE_ZP, 2, 0}, //0x66, 102
+	{"RRA", MODE_UNKNOWN, 0, 0}, //0x67, 103
+	{"PLA", MODE_IMP, 1, 0}, //0x68, 104
+	{"ADC", MODE_IMD, 2, 0}, //0x69, 105
+	{"ROR", MODE_ACC, 1, 0}, //0x6A, 106
+	{"ARR", MODE_UNKNOWN, 0, 0}, //0x6B, 107
+	{"JMP", MODE_IND, 3, 0}, //0x6C, 108
+	{"ADC", MODE_ABS, 3, 1}, //0x6D, 109
+	{"ROR", MODE_ABS, 3, 1}, //0x6E, 110
+	{"RRA", MODE_UNKNOWN, 0, 0}, //0x6F, 111
+	{"BVS", MODE_REL, 2, 0}, //0x70, 112
+	{"ADC", MODE_INDY, 2, 0}, //0x71, 113
+	{"STP", MODE_UNKNOWN, 0, 0}, //0x72, 114
+	{"RRA", MODE_UNKNOWN, 0, 0}, //0x73, 115
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x74, 116
+	{"ADC", MODE_ZPX, 2, 0}, //0x75, 117
+	{"ROR", MODE_ZPX, 2, 0}, //0x76, 118
+	{"RRA", MODE_UNKNOWN, 0, 0}, //0x77, 119
+	{"SEI", MODE_IMP, 1, 0}, //0x78, 120
+	{"ADC", MODE_ABSY, 3, 0}, //0x79, 121
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x7A, 122
+	{"RRA", MODE_UNKNOWN, 0, 0}, //0x7B, 123
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x7C, 124
+	{"ADC", MODE_ABSX, 3, 0}, //0x7D, 125
+	{"ROR", MODE_ABSX, 3, 0}, //0x7E, 126
+	{"RRA", MODE_UNKNOWN, 0, 0}, //0x7F, 127
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x80, 128
+	{"STA", MODE_INDX, 2, 1}, //0x81, 129
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x82, 130
+	{"SAX", MODE_UNKNOWN, 0, 0}, //0x83, 131
+	{"STY", MODE_ZP, 2, 1}, //0x84, 132
+	{"STA", MODE_ZP, 2, 1}, //0x85, 133
+	{"STX", MODE_ZP, 2, 1}, //0x86, 134
+	{"SAX", MODE_UNKNOWN, 0, 0}, //0x87, 135
+	{"DEY", MODE_IMP, 1, 0}, //0x88, 136
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0x89, 137
+	{"TXA", MODE_IMP, 1, 0}, //0x8A, 138
+	{"XAA", MODE_UNKNOWN, 0, 0}, //0x8B, 139
+	{"STY", MODE_ABS, 3, 1}, //0x8C, 140
+	{"STA", MODE_ABS, 3, 1}, //0x8D, 141
+	{"STX", MODE_ABS, 3, 1}, //0x8E, 142
+	{"SAX", MODE_UNKNOWN, 0, 0}, //0x8F, 143
+	{"BCC", MODE_REL, 2, 0}, //0x90, 144
+	{"STA", MODE_INDY, 2, 1}, //0x91, 145
+	{"STP", MODE_UNKNOWN, 0, 0}, //0x92, 146
+	{"AHX", MODE_UNKNOWN, 0, 0}, //0x93, 147
+	{"STY", MODE_ZPX, 2, 1}, //0x94, 148
+	{"STA", MODE_ZPX, 2, 1}, //0x95, 149
+	{"STX", MODE_ZPY, 2, 1}, //0x96, 150
+	{"SAX", MODE_UNKNOWN, 0, 0}, //0x97, 151
+	{"TYA", MODE_IMP, 1, 0}, //0x98, 152
+	{"STA", MODE_ABSY, 3, 1}, //0x99, 153
+	{"TXS", MODE_IMP, 1, 0}, //0x9A, 154
+	{"TAS", MODE_IMP, 1, 0}, //0x9B, 155
+	{"SHY", MODE_UNKNOWN, 0, 0}, //0x9C, 156
+	{"STA", MODE_ABSX, 3, 1}, //0x9D, 157
+	{"SHX", MODE_UNKNOWN, 0, 0}, //0x9E, 158
+	{"AHX", MODE_UNKNOWN, 0, 0}, //0x9F, 159
+	{"LDY", MODE_IMD, 2, 1}, //0xA0, 160
+	{"LDA", MODE_INDX, 2, 1}, //0xA1, 161
+	{"LDX", MODE_IMD, 2, 1}, //0xA2, 162
+	{"LAX", MODE_UNKNOWN, 0, 0}, //0xA3, 163
+	{"LDY", MODE_ZP, 2, 1}, //0xA4, 164
+	{"LDA", MODE_ZP, 2, 1}, //0xA5, 165
+	{"LDX", MODE_ZP, 2, 1}, //0xA6, 166
+	{"LAX", MODE_UNKNOWN, 0, 0}, //0xA7, 167
+	{"TAY", MODE_IMP, 1, 0}, //0xA8, 168
+	{"LDA", MODE_IMD, 2, 1}, //0xA9, 169
+	{"TAX", MODE_IMP, 1, 0}, //0xAA, 170
+	{"LAX", MODE_UNKNOWN, 0, 0}, //0xAB, 171
+	{"LDY", MODE_ABS, 3, 1}, //0xAC, 172
+	{"LDA", MODE_ABS, 3, 1}, //0xAD, 173
+	{"LDX", MODE_ABS, 3, 1}, //0xAE, 174
+	{"LAX", MODE_UNKNOWN, 0, 0}, //0xAF, 175
+	{"BCS", MODE_REL, 2, 0}, //0xB0, 176
+	{"LDA", MODE_INDY, 2, 1}, //0xB1, 177
+	{"STP", MODE_UNKNOWN, 0, 0}, //0xB2, 178
+	{"LAX", MODE_UNKNOWN, 0, 0}, //0xB3, 179
+	{"LDY", MODE_ZPX, 2, 1}, //0xB4, 180
+	{"LDA", MODE_ZPX, 2, 1}, //0xB5, 181
+	{"LDX", MODE_ZPY, 2, 1}, //0xB6, 182
+	{"LAX", MODE_UNKNOWN, 0, 0}, //0xB7, 183
+	{"CLV", MODE_IMP, 1, 0}, //0xB8, 184
+	{"LDA", MODE_ABSY, 3, 1}, //0xB9, 185
+	{"TSX", MODE_IMP, 1, 0}, //0xBA, 186
+	{"LAS", MODE_UNKNOWN, 0, 0}, //0xBB, 187
+	{"LDY", MODE_ABSX, 3, 1}, //0xBC, 188
+	{"LDA", MODE_ABSX, 3, 1}, //0xBD, 189
+	{"LDX", MODE_ABSY, 3, 1}, //0xBE, 190
+	{"LAX", MODE_UNKNOWN, 0, 0}, //0xBF, 191
+	{"CPY", MODE_IMD, 2, 0}, //0xC0, 192
+	{"CMP", MODE_INDX, 2, 0}, //0xC1, 193
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0xC2, 194
+	{"DCP", MODE_UNKNOWN, 0, 0}, //0xC3, 195
+	{"CPY", MODE_ZP, 2, 0}, //0xC4, 196
+	{"CMP", MODE_ZP, 2, 0}, //0xC5, 197
+	{"DEC", MODE_ZP, 2, 0}, //0xC6, 198
+	{"DCP", MODE_UNKNOWN, 0, 0}, //0xC7, 199
+	{"INY", MODE_IMP, 1, 0}, //0xC8, 200
+	{"CMP", MODE_IMD, 2, 0}, //0xC9, 201
+	{"DEX", MODE_IMP, 1, 0}, //0xCA, 202
+	{"AXS", MODE_UNKNOWN, 0, 0}, //0xCB, 203
+	{"CPY", MODE_ABS, 3, 1}, //0xCC, 204
+	{"CMP", MODE_ABS, 3, 1}, //0xCD, 205
+	{"DEC", MODE_ABS, 3, 1}, //0xCE, 206
+	{"DCP", MODE_UNKNOWN, 0, 0}, //0xCF, 207
+	{"BNE", MODE_REL, 2, 0}, //0xD0, 208
+	{"CMP", MODE_INDY, 2, 0}, //0xD1, 209
+	{"STP", MODE_UNKNOWN, 0, 0}, //0xD2, 210
+	{"DCP", MODE_UNKNOWN, 0, 0}, //0xD3, 211
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0xD4, 212
+	{"CMP", MODE_ZPX, 2, 0}, //0xD5, 213
+	{"DEC", MODE_ZPX, 2, 0}, //0xD6, 214
+	{"DCP", MODE_UNKNOWN, 0, 0}, //0xD7, 215
+	{"CLD", MODE_IMP, 1, 0}, //0xD8, 216
+	{"CMP", MODE_ABSY, 3, 0}, //0xD9, 217
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0xDA, 218
+	{"DCP", MODE_UNKNOWN, 0, 0}, //0xDB, 219
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0xDC, 220
+	{"CMP", MODE_ABSX, 3, 0}, //0xDD, 221
+	{"DEC", MODE_ABSX, 3, 0}, //0xDE, 222
+	{"DCP", MODE_UNKNOWN, 0, 0}, //0xDF, 223
+	{"CPX", MODE_IMD, 2, 0}, //0xE0, 224
+	{"SBC", MODE_INDX, 2, 0}, //0xE1, 225
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0xE2, 226
+	{"ISC", MODE_UNKNOWN, 0, 0}, //0xE3, 227
+	{"CPX", MODE_ZP, 2, 0}, //0xE4, 228
+	{"SBC", MODE_ZP, 2, 0}, //0xE5, 229
+	{"INC", MODE_ZP, 2, 0}, //0xE6, 230
+	{"ISC", MODE_UNKNOWN, 0, 0}, //0xE7, 231
+	{"INX", MODE_IMP, 1, 0}, //0xE8, 232
+	{"SBC", MODE_IMD, 2, 0}, //0xE9, 233
+	{"NOP", MODE_IMP, 1, 0}, //0xEA, 234
+	{"SBC", MODE_UNKNOWN, 0, 0}, //0xEB, 235
+	{"CPX", MODE_ABS, 3, 1}, //0xEC, 236
+	{"SBC", MODE_ABS, 3, 1}, //0xED, 237
+	{"INC", MODE_ABS, 3, 1}, //0xEE, 238
+	{"ISC", MODE_UNKNOWN, 0, 0}, //0xEF, 239
+	{"BEQ", MODE_REL, 2, 0}, //0xF0, 240
+	{"SBC", MODE_INDY, 2, 0}, //0xF1, 241
+	{"STP", MODE_UNKNOWN, 0, 0}, //0xF2, 242
+	{"ISC", MODE_UNKNOWN, 0, 0}, //0xF3, 243
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0xF4, 244
+	{"SBC", MODE_ZPX, 2, 0}, //0xF5, 245
+	{"INC", MODE_ZPX, 2, 0}, //0xF6, 246
+	{"ISC", MODE_UNKNOWN, 0, 0}, //0xF7, 247
+	{"SED", MODE_IMP, 1, 0}, //0xF8, 248
+	{"SBC", MODE_ABSY, 3, 0}, //0xF9, 249
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0xFA, 250
+	{"ISC", MODE_UNKNOWN, 0, 0}, //0xFB, 251
+	{"NOP", MODE_UNKNOWN, 0, 0}, //0xFC, 252
+	{"SBC", MODE_ABSX, 3, 0}, //0xFD, 253
+	{"INC", MODE_ABSX, 3, 0}, //0xFE, 254
+	{"ISC", MODE_UNKNOWN, 0, 0}, //0xFF, 255
 };
