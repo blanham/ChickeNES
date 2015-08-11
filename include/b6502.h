@@ -1,3 +1,5 @@
+#ifndef C_6502_H
+#define C_6502_H
 /*
  * B6502.h
  *
@@ -6,7 +8,7 @@
  */
 #include <stdint.h>
 
-struct _cpu {
+struct _mos6502_cpu {
 	uint8_t a;
 	uint8_t x;
 	uint8_t y;
@@ -18,9 +20,11 @@ struct _cpu {
 	uint8_t *stack;
 	uint8_t *zero_page;
 	uint8_t *ram;
-	//function pointers
-	//
-	
+
+	void *aux;
+	void	(*write)(void *, uint16_t, uint8_t);
+	uint8_t (*read)(void *, uint16_t);
+
 	int cycles;
 };
 
@@ -30,7 +34,7 @@ enum mos6502_flags {
 	FLAG_INT	= 0x04,
 	FLAG_DEC	= 0x08,
 	FLAG_BRK	= 0x10,
-	FLAG_PUSHED	= 0x20,
+	FLAG_PUSH	= 0x20,
 	FLAG_OVER	= 0x40,
 	FLAG_NEG	= 0x80
 };
@@ -53,8 +57,10 @@ enum mos6502_flags {
  +--------- Negative: Set to bit 7 of the last operation
 
    */
-typedef struct _cpu mos6502;
+typedef struct _mos6502_cpu mos6502;
 
 mos6502 *mos6502_alloc();
+void mos6502_reset(mos6502 *cpu);
 int mos6502_doop(mos6502 *cpu);
 int mos6502_logger(mos6502 *cpu);
+#endif

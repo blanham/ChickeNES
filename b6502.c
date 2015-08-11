@@ -11,6 +11,7 @@
 #include <stdbool.h>
 
 #include "b6502.h"
+#include "b6502_macros.h"
 
 extern uint8_t *RAM;
 
@@ -28,7 +29,6 @@ int cycles = 0;
 //some functions need to save P
 uint8_t saveP;
 
-#define POP(cpu) (cpu->ram[0x100 + ++cpu->sp])
 
 mos6502 *mos6502_alloc()
 {
@@ -38,40 +38,28 @@ mos6502 *mos6502_alloc()
 	ret->flags = 0x24;
 	ret->pc = 0xC000;
 	ret->ram = RAM;
+	ret->stack = calloc(0x100, 1);
+	ret->zero_page = calloc(0x100, 1);
 	return ret;
-}
-
-void printp(mos6502 *cpu)
-{
-    printf("P:");
-	//printf(cpu->flags & 0x80 ? "N" : "n");
-    if (cpu->flags & 0x80)printf("N");
-    else printf("n");
-    if (cpu->flags & 0x40)printf("V");
-    else printf("v");
-    if (cpu->flags & 0x20)printf("U");
-    else printf("u");
-    if (cpu->flags & 0x10)printf("B");
-    else printf("b");
-    if (cpu->flags & 0x08)printf("D");
-    else printf("d");
-    if (cpu->flags & 0x04)printf("I");
-    else printf("i");
-    if (cpu->flags & 0x02)printf("Z");
-    else printf("z");
-    if (cpu->flags & 0x01)printf("C");
-    else printf("c");
 }
 
 void nmi(mos6502 *cpu)
 {
-	RAM[0x0100+cpu->sp--] = (cpu->pc >> 8);
-	RAM[0x0100+cpu->sp--] = (cpu->pc & 0xff);
+	PUSH_PC(cpu);
+	PUSH(cpu, cpu->flags);
+/*  RAM[0x0100+cpu->sp--] = (uint8_t)(cpu->pc >> 8);
+	RAM[0x0100+cpu->sp--] = (uint8_t)(cpu->pc & 0xff);
 	RAM[0x0100+cpu->sp--] = cpu->flags;
+	*/
 	cpu->pc = RAM[0xfffa] + (RAM[0xfffb]<<8);
 	RAM[0x2000] |= 0x80;
 }
 
+void mos6502_reset(mos6502 *cpu)
+{
+	cpu->pc = cpu->read(cpu->aux, 0xFFFC);
+	cpu->pc |= cpu->read(cpu->aux, 0xFFFD) << 8;
+}
 
 void initCPU(void)
 {
@@ -79,7 +67,7 @@ void initCPU(void)
 //	cpu->pc = RAM[0xfffc] + (RAM[0xfffd]<<8);
 //	printf("Starting execution at: %.4x\n", cpu->pc);
 	//set CPU flags and registers clear
-	
+
 //	A=X=Y=P=0;
 //	cpu->flags |= 0x4;
 }
@@ -95,9 +83,9 @@ void chknegzero(mos6502 *cpu, uint8_t chk) {
 }
 
 void pushstack(mos6502 *cpu) {
-	RAM[0x0100+cpu->sp] = cpu->pc;
+	RAM[0x0100+cpu->sp] = (uint8_t)(cpu->pc >> 8);
 	cpu->sp--;
-	RAM[0x0100+cpu->sp] = cpu->pc+1;
+	RAM[0x0100+cpu->sp] = (uint8_t)(cpu->pc & 0xff);
 	cpu->sp--;
 	RAM[0x0100+cpu->sp] = cpu->flags;
 	cpu->sp--;
@@ -140,7 +128,7 @@ void RdZpY(mos6502 *cpu) {
 
 void RdAbs(mos6502 *cpu) {
 	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc+1+1]<<8);
- 	val = ReadRAM(savepc);
+	val = ReadRAM(savepc);
 	cpu->pc += 2;
 	cycles = 4;
 }
@@ -235,8 +223,6 @@ void WrZpX(mos6502 *cpu) {
 
 void WrZpY(mos6502 *cpu) {
 	RAM[savepc] = val;
-
-
 	cpu->pc++;
 }
 
@@ -349,11 +335,11 @@ void ADC(mos6502 *cpu) {
 	chknegzero(cpu, cpu->a);
 }
 
-//AND
-void AND(mos6502 *cpu) {
-	cpu->a &= val;
-	chknegzero(cpu, cpu->a);
-}
+////AND
+//void AND(mos6502 *cpu) {
+//	cpu->a &= val;
+//	chknegzero(cpu, cpu->a);
+//}
 
 //ASL
 void ASL(mos6502 *cpu) {
@@ -386,8 +372,6 @@ void mos6502_branch(mos6502 *cpu, enum mos6502_flags flag, bool condition) {
 
 //CMP
 void CMP(mos6502 *cpu) {
-
-
 	if (cpu->a == val) cpu->flags |= 0x02;
 	else cpu->flags &= 0xfd;
 
@@ -400,7 +384,6 @@ void CMP(mos6502 *cpu) {
 
 //CPX
 void CPX(mos6502 *cpu) {
-
 	if (cpu->x == val) cpu->flags |= 0x02;
 	else cpu->flags &= 0xfd;
 
@@ -413,7 +396,6 @@ void CPX(mos6502 *cpu) {
 
 //CPY
 void CPY(mos6502 *cpu) {
-
 	//we use the helper variable
 	helper = cpu->y - val;
 	//if Y = cpu->pc+1, we set zero
@@ -481,17 +463,17 @@ void JMP(mos6502 *cpu) {
 }
 
 //JSR
-void JSR(mos6502 *cpu) {
-	savepc = cpu->pc + 0x2;
-	RAM[0x0100+cpu->sp--]= ((savepc >> 8));
-	RAM[0x0100+cpu->sp--]= ((savepc & 0xff));
-
-
-	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc + 2] << 8);
-	savepc = savepc - 0x1;
-	cpu->pc = savepc;
-	cycles = 6;
-}
+//void JSR(mos6502 *cpu) {
+//	savepc = cpu->pc + 0x2;
+//	RAM[0x0100+cpu->sp--]= ((savepc >> 8));
+//	RAM[0x0100+cpu->sp--]= ((savepc & 0xff));
+//
+//
+//	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc + 2] << 8);
+//	savepc = savepc - 0x1;
+//	cpu->pc = savepc;
+//	cycles = 6;
+//}
 
 //LDA
 void LDA(mos6502 *cpu) {
@@ -548,7 +530,7 @@ void PLA(mos6502 *cpu) {
 
 //PLP
 void PLP(mos6502 *cpu) {
-	cpu->flags = (POP(cpu) & ~FLAG_BRK) | FLAG_PUSHED;
+	cpu->flags = (POP(cpu) & ~FLAG_BRK) | FLAG_PUSH;
 	cycles = 4;
 }
 
@@ -663,10 +645,9 @@ void BRK(mos6502 *cpu) {
 
 int mos6502_doop(mos6502 *cpu) {
 	cycles = 0;
-	uint8_t op = cpu->ram[cpu->pc];
+	uint8_t op = READ8(cpu, cpu->pc);
 
 	switch (op) {
-
 			//Flags
 		case 0x18: cpu->flags &= 0xFE; cycles = 2;break;
 		case 0x58: cpu->flags &= 0xFB; cycles = 2;break;
@@ -677,24 +658,25 @@ int mos6502_doop(mos6502 *cpu) {
 		case 0xF8: cpu->flags |= 0x08; cycles = 2;break;
 
 			//ADC
-		case 0x69: RdImd(cpu);  ADC(cpu); break;
-		case 0x65: RdZp(cpu);   ADC(cpu); break;
-		case 0x75: RdZpX(cpu);  ADC(cpu); break;
-		case 0x6D: RdAbs(cpu);  ADC(cpu); break;
-		case 0x7D: RdAbsX(cpu); ADC(cpu); break;
-		case 0x79: RdAbsY(cpu); ADC(cpu); break;
-		case 0x61: RdIndX(cpu); ADC(cpu); break;
-		case 0x71: RdIndY(cpu); ADC(cpu); break;
+		//case 0x69: RdImd(cpu);  ADC(cpu); break;
+		//case 0x65: RdZp(cpu);   ADC(cpu); break;
+		//case 0x75: RdZpX(cpu);  ADC(cpu); break;
+		//case 0x6D: RdAbs(cpu);  ADC(cpu); break;
+		//case 0x7D: RdAbsX(cpu); ADC(cpu); break;
+		//case 0x79: RdAbsY(cpu); ADC(cpu); break;
+		//case 0x61: RdIndX(cpu); ADC(cpu); break;
+		//case 0x71: RdIndY(cpu); ADC(cpu); break;
 
 			//AND
-		case 0x29: RdImd(cpu);  AND(cpu); break;
-		case 0x25: RdZp(cpu);   AND(cpu); break;
-		case 0x35: RdZpX(cpu);  AND(cpu); break;
-		case 0x2D: RdAbs(cpu);  AND(cpu); break;
-		case 0x3D: RdAbsX(cpu); AND(cpu); break;
-		case 0x39: RdAbsY(cpu); AND(cpu); break;
-		case 0x21: RdIndX(cpu); AND(cpu); break;
-		case 0x31: RdIndY(cpu); AND(cpu); break;
+		case 0x29: AND(cpu, READ_IMM_8(cpu)); break;
+		//case 0x29: RdImd(cpu);  AND(cpu); break;
+		//case 0x25: RdZp(cpu);   AND(cpu); break;
+		//case 0x35: RdZpX(cpu);  AND(cpu); break;
+		//case 0x2D: RdAbs(cpu);  AND(cpu); break;
+		//case 0x3D: RdAbsX(cpu); AND(cpu); break;
+		//case 0x39: RdAbsY(cpu); AND(cpu); break;
+		//case 0x21: RdIndX(cpu); AND(cpu); break;
+		//case 0x31: RdIndY(cpu); AND(cpu); break;
 
 			//ASL
 		case 0x0A: RdAcc(cpu); ASL(cpu); MAcc(cpu);  break;
@@ -706,20 +688,20 @@ int mos6502_doop(mos6502 *cpu) {
 			//Branches
 		case 0x90: mos6502_branch(cpu, FLAG_CARRY, false);	break; //BCC
 		case 0xB0: mos6502_branch(cpu, FLAG_CARRY, true);	break; //BCS
-		case 0xF0: mos6502_branch(cpu, FLAG_ZERO, true);	break;
-		case 0x30: mos6502_branch(cpu, FLAG_NEG, true);		break;
-		case 0xD0: mos6502_branch(cpu, FLAG_ZERO, false);	break;
-		case 0x10: mos6502_branch(cpu, FLAG_NEG, false);	break;
-		case 0x50: mos6502_branch(cpu, FLAG_OVER, false);	break;
-		case 0x70: mos6502_branch(cpu, FLAG_OVER, true);	break;
+		case 0xF0: mos6502_branch(cpu, FLAG_ZERO,  true);	break;
+		case 0x30: mos6502_branch(cpu, FLAG_NEG,   true);	break;
+		case 0xD0: mos6502_branch(cpu, FLAG_ZERO,  false);	break;
+		case 0x10: mos6502_branch(cpu, FLAG_NEG,   false);	break;
+		case 0x50: mos6502_branch(cpu, FLAG_OVER,  false);	break;
+		case 0x70: mos6502_branch(cpu, FLAG_OVER,  true);	break;
 
 			//BIT
 		case 0x24: RdZp(cpu);  BIT(cpu); break;
 		case 0x2C: RdAbs(cpu); BIT(cpu); break;
-			
+
 		case 0x00: BRK(cpu); break;
 
-				   //CMP
+			//CMP
 		case 0xC9: RdImd(cpu);  CMP(cpu); break;
 		case 0xC5: RdZp(cpu);   CMP(cpu); break;
 		case 0xD5: RdZpX(cpu);  CMP(cpu); break;
@@ -729,29 +711,29 @@ int mos6502_doop(mos6502 *cpu) {
 		case 0xC1: RdIndX(cpu); CMP(cpu); break;
 		case 0xD1: RdIndY(cpu); CMP(cpu); break;
 
-				   //CPX
+			//CPX
 		case 0xE0: RdImd(cpu); CPX(cpu); break;
 		case 0xE4: RdZp(cpu);  CPX(cpu); break;
 		case 0xEC: RdAbs(cpu); CPX(cpu); break;
 
-				   //CPY
+			//CPY
 		case 0xC0: RdImd(cpu); CPY(cpu); break;
 		case 0xC4: RdZp(cpu);  CPY(cpu); break;
 		case 0xCC: RdAbs(cpu); CPY(cpu); break;
 
-				   //DEC
+			//DEC
 		case 0xC6: RdZp(cpu);  DEC(cpu); MZp(cpu); cycles+=2; break;
 		case 0xD6: RdZpX(cpu); DEC(cpu); MZpX(cpu); cycles+=2; break;
 		case 0xCE: SAbs(cpu);  DEC(cpu); MAbs(cpu); cycles+=2; break;
 		case 0xDE: RdAbsX(cpu);DEC(cpu); MAbsX(cpu); break;
 
-				   //DEX
+			//DEX
 		case 0xCA: DEX(cpu); break;
 
-				   //DEY
+			//DEY
 		case 0x88: DEY(cpu); break;
 
-				   //EOR
+			//EOR
 		case 0x49: RdImd(cpu);  EOR(cpu); break;
 		case 0x45: RdZp(cpu);   EOR(cpu); break;
 		case 0x55: RdZpX(cpu);  EOR(cpu); break;
@@ -761,26 +743,26 @@ int mos6502_doop(mos6502 *cpu) {
 		case 0x41: RdIndX(cpu); EOR(cpu); break;
 		case 0x51: RdIndY(cpu); EOR(cpu); break;
 
-				   //INC
+			//INC
 		case 0xE6: RdZp(cpu);   INC(cpu); MZp(cpu); cycles+=2;  break;
 		case 0xF6: RdZpX(cpu);  INC(cpu); MZpX(cpu); cycles+=2; break;
 		case 0xEE: SAbs(cpu);   INC(cpu); MAbs(cpu); cycles+=2; break;
 		case 0xFE: RdAbsX(cpu); INC(cpu); MAbsX(cpu); break;
 
-				   //INX
+			//INX
 		case 0xE8: INX(cpu); break;
 
-				   //INY
+			//INY
 		case 0xC8: INY(cpu); break;
 
-				   //JMP
+			//JMP
 		case 0x4C: SAbs(cpu);  JMP(cpu); break;
 		case 0x6C: RdInd(cpu); JMP(cpu); cycles+=2; break;
 
-				   //JSR
-		case 0x20: JSR(cpu); break;
+			//JSR
+		case 0x20: JSR(cpu); cycles = 6; break;
 
-				   //LDA
+			//LDA
 		case 0xA9: RdImd(cpu); LDA(cpu); break;
 		case 0xA5: RdZp(cpu);  LDA(cpu); break;
 		case 0xB5: RdZpX(cpu); LDA(cpu); break;
@@ -790,21 +772,21 @@ int mos6502_doop(mos6502 *cpu) {
 		case 0xA1: RdIndX(cpu);LDA(cpu); break;
 		case 0xB1: RdIndY(cpu);LDA(cpu); break;
 
-				   //LDX
+			//LDX
 		case 0xA2: RdImd(cpu); LDX(cpu); break;
 		case 0xA6: RdZp(cpu);  LDX(cpu); break;
 		case 0xB6: RdZpY(cpu); LDX(cpu); break;
 		case 0xAE: RdAbs(cpu); LDX(cpu); break;
 		case 0xBE: RdAbsY(cpu);LDX(cpu); break;
 
-				   //LDY
+			//LDY
 		case 0xA0: RdImd(cpu); LDY(cpu); break;
 		case 0xA4: RdZp(cpu);  LDY(cpu); break;
 		case 0xB4: RdZpX(cpu); LDY(cpu); break;
 		case 0xAC: RdAbs(cpu); LDY(cpu); break;
 		case 0xBC: RdAbsX(cpu);LDY(cpu); break;
 
-				   //LSR
+			//LSR
 		case 0x4A: RdAcc(cpu);  LSR(cpu); WrAcc(cpu); break;
 		case 0x46: RdZp(cpu);   LSR(cpu); MZp(cpu); cycles +=2;   break;
 		case 0x56: RdZpX(cpu);  LSR(cpu); MZpX(cpu); cycles +=2;   break;
@@ -836,12 +818,12 @@ int mos6502_doop(mos6502 *cpu) {
 			cpu->pc += 2;
 			break;
 */
-					//LAX
+				//LAX
 		//case 0xa3: RdIndX(cpu); LDA(cpu);LDX(cpu);break;
 		//ase 0xA7: RdZp(cpu); LDA(cpu); LDX(cpu);break;
-					
 
-					//ORA
+
+				//ORA
 		case 0x09: RdImd(cpu);  ORA(cpu); break;
 		case 0x05: RdZp(cpu);   ORA(cpu); break;
 		case 0x15: RdZpX(cpu);  ORA(cpu); break;
@@ -851,39 +833,39 @@ int mos6502_doop(mos6502 *cpu) {
 		case 0x01: RdIndX(cpu); ORA(cpu); break;
 		case 0x11: RdIndY(cpu); ORA(cpu); break;
 
-				   //PHA
+			//PHA
 		case 0x48: PHA(cpu); break;
 
-				   //PHP
+			//PHP
 		case 0x08: PHP(cpu); break;
 
-				   //PLA
+			//PLA
 		case 0x68: PLA(cpu); break;
 
-				   //PLP
+			//PLP
 		case 0x28: PLP(cpu); break;
 
-				   //ROL
+			//ROL
 		case 0x2A: RdAcc(cpu);  ROL(cpu); WrAcc(cpu); break;
 		case 0x26: RdZp(cpu);   ROL(cpu); MZp(cpu);   cycles +=2; break;
 		case 0x36: RdZpX(cpu);  ROL(cpu); MZpX(cpu);  cycles +=2; break;
 		case 0x2E: SAbs(cpu);   ROL(cpu); MAbs(cpu);  cycles +=2; break;
 		case 0x3E: RdAbsX(cpu); ROL(cpu); MAbsX(cpu); break;
 
-				   //ROR
+			//ROR
 		case 0x6A: RdAcc(cpu);  ROR(cpu); WrAcc(cpu); break;
 		case 0x66: RdZp(cpu);   ROR(cpu); MZp(cpu);   cycles +=2; break;
 		case 0x76: RdZpX(cpu);  ROR(cpu); MZpX(cpu);  cycles +=2; break;
 		case 0x6E: SAbs(cpu);   ROR(cpu); MAbs(cpu);  cycles +=2; break;
 		case 0x7E: RdAbsX(cpu); ROR(cpu); MAbsX(cpu); break;
 
-				   //RTI
+			//RTI
 		case 0x40: RTI(cpu); break;
 
-				   //RTS
+			//RTS
 		case 0x60: RTS(cpu); break;
 
-				   //SBC
+			//SBC
 		case 0xE9: RdImd(cpu);  SBC(cpu); break;
 		case 0xe5: RdZp(cpu);   SBC(cpu); break;
 		case 0xF5: RdZpX(cpu);  SBC(cpu); break;
@@ -893,7 +875,7 @@ int mos6502_doop(mos6502 *cpu) {
 		case 0xE1: RdIndX(cpu); SBC(cpu); break;
 		case 0xF1: RdIndY(cpu); SBC(cpu); break;
 
-				   //STA
+			//STA
 		case 0x85: RdZp(cpu);   STA(cpu); MZp(cpu);   break;
 		case 0x95: RdZpX(cpu);  STA(cpu); MZpX(cpu);  break;
 		case 0x8D: SAbs(cpu);   STA(cpu); MAbs(cpu);  break;
@@ -902,32 +884,32 @@ int mos6502_doop(mos6502 *cpu) {
 		case 0x81: RdIndX(cpu); STA(cpu); MIndX(cpu); break;
 		case 0x91: RdIndY(cpu); STA(cpu); MIndY(cpu); cycles++; break;
 
-				   //STX
+			//STX
 		case 0x86: RdZp(cpu);  STX(cpu); MZp(cpu);  break;
 		case 0x96: RdZpY(cpu); STX(cpu); MZpY(cpu); break;
 		case 0x8E: SAbs(cpu);  STX(cpu); MAbs(cpu); break;
 
-				   //STY
+			//STY
 		case 0x84: RdZp(cpu);  STY(cpu); MZp(cpu);  break;
 		case 0x94: RdZpX(cpu); STY(cpu); MZpX(cpu); break;
 		case 0x8C: SAbs(cpu);  STY(cpu); MAbs(cpu); break;
 
-				   //TAX
+			//TAX
 		case 0xAA: TAX(cpu); break;
 
-				   //TAY
+			//TAY
 		case 0xA8: TAY(cpu); break;
 
-				   //TSX
+			//TSX
 		case 0xBA: TSX(cpu); break;
 
-				   //TXA
+			//TXA
 		case 0x8A: TXA(cpu); break;
 
-				   //TXS
+			//TXS
 		case 0x9A: TXS(cpu); break;
 
-				   //TYA
+			//TYA
 		case 0x98: TYA(cpu); break;
 
 		default:
@@ -946,32 +928,33 @@ int mos6502_doop(mos6502 *cpu) {
 int mos6502_logger(mos6502 *cpu) {
 	int ret = 0;
 	static int lcycles = 0;
-	uint8_t opcode = cpu->ram[cpu->pc];
+	fprintf(stderr, "%.4X  ", cpu->pc);
+	uint8_t opcode = READ8(cpu, cpu->pc);
 	struct op *op = &ops[opcode];
 
-	fprintf(stderr, "%.4X  ", cpu->pc);
 
 	switch(op->bytes) {
 		case 1:
 			fprintf(stderr, "%.2X        ", opcode);
 			break;
 		case 2:
-			fprintf(stderr, "%.2X %.2X     ", opcode, cpu->ram[cpu->pc + 1]);
+			fprintf(stderr, "%.2X %.2X     ", opcode, READ8(cpu, cpu->pc + 1));
 			break;
 		case 3:
 			fprintf(stderr, "%.2X %.2X %.2X  ",
-				   	opcode, cpu->ram[cpu->pc + 1], cpu->ram[cpu->pc + 2]);
+					opcode, READ8(cpu, cpu->pc + 1), READ8(cpu, cpu->pc + 2));
 	}
 
 	fprintf(stderr, "%s ", op->name);
 
+	/*
 	switch(op->mode) {
 		case MODE_ACC:
 			fprintf(stderr, "A         ");
 			break;
 		case MODE_ABS:
 			if (op->modify) {
-				uint16_t addr = cpu->ram[cpu->pc + 1] +  (cpu->ram[cpu->pc + 2] << 8); 
+				uint16_t addr = cpu->ram[cpu->pc + 1] +  (cpu->ram[cpu->pc + 2] << 8);
 				fprintf(stderr, "$%.4X =  %.2X\t\t\t\t", addr, cpu->ram[addr]);
 			} else {
 				fprintf(stderr, "$%.2X%.2X   \t\t\t\t", cpu->ram[cpu->pc + 2], cpu->ram[cpu->pc + 1]);
@@ -979,7 +962,7 @@ int mos6502_logger(mos6502 *cpu) {
 			break;
 		case MODE_IND:
 			{
-				uint16_t addr = cpu->ram[cpu->pc + 1] | (cpu->ram[cpu->pc + 2] << 8); 
+				uint16_t addr = cpu->ram[cpu->pc + 1] | (cpu->ram[cpu->pc + 2] << 8);
 				fprintf(stderr, "($%.4X) =  %.2X%.2X\t\t\t", addr, cpu->ram[addr+1], cpu->ram[addr]);
 			}
 			break;
@@ -1028,18 +1011,18 @@ int mos6502_logger(mos6502 *cpu) {
 			break;
 		case MODE_INDY:
 			{
-/*
-void RdIndY(mos6502 *cpu) {
-	cycles = 5;
-	val = RAM[cpu->pc+1];
-	savepc = RAM[val];
-
-	savepc |= (RAM[++val] << 8);
-	savepc +=cpu->y;
-
-	val = RAM[savepc];
-	cpu->pc++;
-}*/
+///
+//void RdIndY(mos6502 *cpu) {
+//	cycles = 5;
+//	val = RAM[cpu->pc+1];
+//	savepc = RAM[val];
+//
+//	savepc |= (RAM[++val] << 8);
+//	savepc +=cpu->y;
+//
+//	val = RAM[savepc];
+//	cpu->pc++;
+//}/
 
 			//LDA ($89),Y = 0300 @ 0300 = 89
 			uint8_t zp = cpu->ram[cpu->pc + 1];
@@ -1064,10 +1047,13 @@ void RdIndY(mos6502 *cpu) {
 		//	fprintf(stderr, "Unimplemented mode %i\n", op->mode);
 		//	exit(EXIT_FAILURE);
 			fprintf(stderr, "%2i        \t\t\t\t", op->mode);
-	}
+	}*/
 
-	fprintf(stderr, "\tA:%.2X X:%.2X Y:%.2X P:%.2X SP:%.2X CYC:%3i\n",
+	fprintf(stderr, "\tA:%.2X X:%.2X Y:%.2X P:%.2X SP:%.2X CYC:%3i ",
 			cpu->a, cpu->x, cpu->y, cpu->flags, cpu->sp, lcycles);
+
+	PRINT_MOS6502_FLAGS(cpu);
+	fprintf(stderr, "\n");
 
 	ret = mos6502_doop(cpu);
 
@@ -1075,6 +1061,6 @@ void RdIndY(mos6502 *cpu) {
 	if (lcycles >= 341) {
 		lcycles -= 341;
 	}
-	
+
 	return ret;
 }
