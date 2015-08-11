@@ -1,9 +1,11 @@
+#ifndef C_NES_CART_H
+#define C_NES_CART_H
 #include <stdint.h>
 
-struct cart {
+struct _nes_cart {
     char *name;
-    int prg_size;
-    int chr_size;
+    size_t prg_size;
+    size_t chr_size;
     int region;
     int mapper;
     int battery;
@@ -12,6 +14,11 @@ struct cart {
 
     uint8_t *prg_rom;
     uint8_t *chr_rom;
-};
 
-struct cart *cart_load(char *filename);
+	uint8_t *prg_pages[32];
+	uint8_t *chr_pages[32];
+};
+typedef struct _nes_cart nes_cart;
+
+nes_cart *nes_cart_load(char *filename);
+#endif
