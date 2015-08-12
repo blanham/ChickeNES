@@ -25,7 +25,7 @@ struct _mos6502_cpu {
 	void	(*write)(void *, uint16_t, uint8_t);
 	uint8_t (*read)(void *, uint16_t);
 
-	int cycles;
+	uint64_t cycles;
 };
 
 enum mos6502_flags {

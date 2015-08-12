@@ -37,7 +37,7 @@ mos6502 *mos6502_alloc()
 	ret->sp = 0xFD;
 	ret->flags = 0x24;
 	ret->pc = 0xC000;
-	ret->ram = RAM;
+	ret->ram = calloc(65536, 1);
 	ret->stack = calloc(0x100, 1);
 	ret->zero_page = calloc(0x100, 1);
 	return ret;
@@ -475,23 +475,6 @@ void JMP(mos6502 *cpu) {
 //	cycles = 6;
 //}
 
-//LDA
-void LDA(mos6502 *cpu) {
-	cpu->a = val;
-	chknegzero(cpu, cpu->a);
-}
-
-//LDX
-void LDX(mos6502 *cpu) {
-	cpu->x = val;
-	chknegzero(cpu, cpu->x);
-}
-
-//LDY
-void LDY(mos6502 *cpu) {
-	cpu->y = val;
-	chknegzero(cpu, cpu->y);
-}
 
 //LSR
 void LSR(mos6502 *cpu) {
@@ -576,9 +559,9 @@ void SBC(mos6502 *cpu) {
 }
 
 //STA
-void STA(mos6502 *cpu) {
-	val = cpu->a;
-}
+//void STA(mos6502 *cpu) {
+//	val = cpu->a;
+//}
 
 //STX
 void STX(mos6502 *cpu) {
@@ -588,47 +571,6 @@ void STX(mos6502 *cpu) {
 //STY
 void STY(mos6502 *cpu) {
 	val = cpu->y;
-}
-
-//TAX
-void TAX(mos6502 *cpu) {
-	cpu->x = cpu->a;
-	chknegzero(cpu, cpu->x);
-	cycles = 2;
-}
-
-//TAY
-void TAY(mos6502 *cpu) {
-	cpu->y = cpu->a;
-	chknegzero(cpu, cpu->y);
-	cycles = 2;
-}
-
-//TSX
-void TSX(mos6502 *cpu) {
-	cpu->x = cpu->sp;
-	chknegzero(cpu, cpu->x);
-	cycles = 2;
-}
-
-//TXA
-void TXA(mos6502 *cpu) {
-	cpu->a = cpu->x;
-	chknegzero(cpu, cpu->a);
-	cycles = 2;
-}
-
-//TXS
-void TXS(mos6502 *cpu) {
-	cpu->sp = cpu->x;
-	cycles = 2;
-}
-
-//TYA
-void TYA(mos6502 *cpu) {
-	cpu->a = cpu->y;
-	chknegzero(cpu, cpu->a);
-	cycles = 2;
 }
 
 void BRK(mos6502 *cpu) {
@@ -643,19 +585,20 @@ void BRK(mos6502 *cpu) {
 			exit(0);
 }
 
+#include "b6502_ops.h"
 int mos6502_doop(mos6502 *cpu) {
 	cycles = 0;
 	uint8_t op = READ8(cpu, cpu->pc);
 
 	switch (op) {
 			//Flags
-		case 0x18: cpu->flags &= 0xFE; cycles = 2;break;
-		case 0x58: cpu->flags &= 0xFB; cycles = 2;break;
-		case 0xB8: cpu->flags &= 0xBF; cycles = 2;break;
-		case 0xD8: cpu->flags &= 0xF7; cycles = 2;break;
-		case 0x38: cpu->flags |= 0x01; cycles = 2;break;
-		case 0x78: cpu->flags |= 0x04; cycles = 2;break;
-		case 0xF8: cpu->flags |= 0x08; cycles = 2;break;
+		case 0x18: FLAG_CLEAR(cpu, FLAG_CARRY); cycles = 2; break;
+		case 0x58: FLAG_CLEAR(cpu, FLAG_INT); cycles = 2; break;
+		case 0xB8: FLAG_CLEAR(cpu, FLAG_OVER); cycles = 2; break;
+		case 0xD8: FLAG_CLEAR(cpu, FLAG_DEC); cycles = 2; break;
+		case 0x38: FLAG_SET(cpu, FLAG_CARRY); cycles = 2;break;
+		case 0x78: FLAG_SET(cpu, FLAG_INT); cycles = 2;break;
+		case 0xF8: FLAG_SET(cpu, FLAG_DEC); cycles = 2;break;
 
 			//ADC
 		//case 0x69: RdImd(cpu);  ADC(cpu); break;
@@ -679,11 +622,11 @@ int mos6502_doop(mos6502 *cpu) {
 		//case 0x31: RdIndY(cpu); AND(cpu); break;
 
 			//ASL
-		case 0x0A: RdAcc(cpu); ASL(cpu); MAcc(cpu);  break;
-		case 0x06: RdZp(cpu);  ASL(cpu); MZp(cpu);  cycles+=2; break;
-		case 0x16: RdZpX(cpu); ASL(cpu); MZpX(cpu); cycles+=2; break;
-		case 0x0E: SAbs(cpu);  ASL(cpu); MAbs(cpu); cycles+=2;  break;
-		case 0x1E: RdAbsX(cpu);ASL(cpu); MAbsX(cpu); break;
+		//case 0x0A: RdAcc(cpu); ASL(cpu); MAcc(cpu);  break;
+		//case 0x06: RdZp(cpu);  ASL(cpu); MZp(cpu);  cycles+=2; break;
+		//case 0x16: RdZpX(cpu); ASL(cpu); MZpX(cpu); cycles+=2; break;
+		//case 0x0E: SAbs(cpu);  ASL(cpu); MAbs(cpu); cycles+=2;  break;
+		//case 0x1E: RdAbsX(cpu);ASL(cpu); MAbsX(cpu); break;
 
 			//Branches
 		case 0x90: mos6502_branch(cpu, FLAG_CARRY, false);	break; //BCC
@@ -696,102 +639,102 @@ int mos6502_doop(mos6502 *cpu) {
 		case 0x70: mos6502_branch(cpu, FLAG_OVER,  true);	break;
 
 			//BIT
-		case 0x24: RdZp(cpu);  BIT(cpu); break;
-		case 0x2C: RdAbs(cpu); BIT(cpu); break;
+		//case 0x24: RdZp(cpu);  BIT(cpu); break;
+		//case 0x2C: RdAbs(cpu); BIT(cpu); break;
 
-		case 0x00: BRK(cpu); break;
+		//case 0x00: BRK(cpu); break;
 
 			//CMP
-		case 0xC9: RdImd(cpu);  CMP(cpu); break;
-		case 0xC5: RdZp(cpu);   CMP(cpu); break;
-		case 0xD5: RdZpX(cpu);  CMP(cpu); break;
-		case 0xCD: RdAbs(cpu);  CMP(cpu); break;
-		case 0xDD: RdAbsX(cpu); CMP(cpu); break;
-		case 0xD9: RdAbsY(cpu); CMP(cpu); break;
-		case 0xC1: RdIndX(cpu); CMP(cpu); break;
-		case 0xD1: RdIndY(cpu); CMP(cpu); break;
+		//case 0xC9: RdImd(cpu);  CMP(cpu); break;
+		//case 0xC5: RdZp(cpu);   CMP(cpu); break;
+		//case 0xD5: RdZpX(cpu);  CMP(cpu); break;
+		//case 0xCD: RdAbs(cpu);  CMP(cpu); break;
+		//case 0xDD: RdAbsX(cpu); CMP(cpu); break;
+		//case 0xD9: RdAbsY(cpu); CMP(cpu); break;
+		//case 0xC1: RdIndX(cpu); CMP(cpu); break;
+		//case 0xD1: RdIndY(cpu); CMP(cpu); break;
 
 			//CPX
-		case 0xE0: RdImd(cpu); CPX(cpu); break;
-		case 0xE4: RdZp(cpu);  CPX(cpu); break;
-		case 0xEC: RdAbs(cpu); CPX(cpu); break;
+		//case 0xE0: RdImd(cpu); CPX(cpu); break;
+		//case 0xE4: RdZp(cpu);  CPX(cpu); break;
+		//case 0xEC: RdAbs(cpu); CPX(cpu); break;
 
 			//CPY
-		case 0xC0: RdImd(cpu); CPY(cpu); break;
-		case 0xC4: RdZp(cpu);  CPY(cpu); break;
-		case 0xCC: RdAbs(cpu); CPY(cpu); break;
+		//case 0xC0: RdImd(cpu); CPY(cpu); break;
+		//case 0xC4: RdZp(cpu);  CPY(cpu); break;
+		//case 0xCC: RdAbs(cpu); CPY(cpu); break;
 
 			//DEC
-		case 0xC6: RdZp(cpu);  DEC(cpu); MZp(cpu); cycles+=2; break;
-		case 0xD6: RdZpX(cpu); DEC(cpu); MZpX(cpu); cycles+=2; break;
-		case 0xCE: SAbs(cpu);  DEC(cpu); MAbs(cpu); cycles+=2; break;
-		case 0xDE: RdAbsX(cpu);DEC(cpu); MAbsX(cpu); break;
+		//case 0xC6: RdZp(cpu);  DEC(cpu); MZp(cpu); cycles+=2; break;
+		//case 0xD6: RdZpX(cpu); DEC(cpu); MZpX(cpu); cycles+=2; break;
+		//case 0xCE: SAbs(cpu);  DEC(cpu); MAbs(cpu); cycles+=2; break;
+		//case 0xDE: RdAbsX(cpu);DEC(cpu); MAbsX(cpu); break;
 
 			//DEX
-		case 0xCA: DEX(cpu); break;
+		//case 0xCA: DEX(cpu); break;
 
 			//DEY
-		case 0x88: DEY(cpu); break;
+		//case 0x88: DEY(cpu); break;
 
 			//EOR
-		case 0x49: RdImd(cpu);  EOR(cpu); break;
-		case 0x45: RdZp(cpu);   EOR(cpu); break;
-		case 0x55: RdZpX(cpu);  EOR(cpu); break;
-		case 0x4D: RdAbs(cpu);  EOR(cpu); break;
-		case 0x5D: RdAbsX(cpu); EOR(cpu); break;
-		case 0x59: RdAbsY(cpu); EOR(cpu); break;
-		case 0x41: RdIndX(cpu); EOR(cpu); break;
-		case 0x51: RdIndY(cpu); EOR(cpu); break;
+		//case 0x49: RdImd(cpu);  EOR(cpu); break;
+		//case 0x45: RdZp(cpu);   EOR(cpu); break;
+		//case 0x55: RdZpX(cpu);  EOR(cpu); break;
+		//case 0x4D: RdAbs(cpu);  EOR(cpu); break;
+		//case 0x5D: RdAbsX(cpu); EOR(cpu); break;
+		//case 0x59: RdAbsY(cpu); EOR(cpu); break;
+		//case 0x41: RdIndX(cpu); EOR(cpu); break;
+		//case 0x51: RdIndY(cpu); EOR(cpu); break;
 
 			//INC
-		case 0xE6: RdZp(cpu);   INC(cpu); MZp(cpu); cycles+=2;  break;
-		case 0xF6: RdZpX(cpu);  INC(cpu); MZpX(cpu); cycles+=2; break;
-		case 0xEE: SAbs(cpu);   INC(cpu); MAbs(cpu); cycles+=2; break;
-		case 0xFE: RdAbsX(cpu); INC(cpu); MAbsX(cpu); break;
+		//case 0xE6: RdZp(cpu);   INC(cpu); MZp(cpu); cycles+=2;  break;
+		//case 0xF6: RdZpX(cpu);  INC(cpu); MZpX(cpu); cycles+=2; break;
+		//case 0xEE: SAbs(cpu);   INC(cpu); MAbs(cpu); cycles+=2; break;
+		//case 0xFE: RdAbsX(cpu); INC(cpu); MAbsX(cpu); break;
 
 			//INX
-		case 0xE8: INX(cpu); break;
+		//case 0xE8: INX(cpu); break;
 
 			//INY
-		case 0xC8: INY(cpu); break;
+		//case 0xC8: INY(cpu); break;
 
 			//JMP
-		case 0x4C: SAbs(cpu);  JMP(cpu); break;
-		case 0x6C: RdInd(cpu); JMP(cpu); cycles+=2; break;
+		case 0x4C: cpu->pc = READ_IMM_16(cpu) - 1; break;
+		case 0x6C: cpu->pc = READ_IND(cpu) - 1; break;
 
 			//JSR
-		case 0x20: JSR(cpu); cycles = 6; break;
+		//case 0x20: JSR(cpu); cycles = 6; break;
 
 			//LDA
-		case 0xA9: RdImd(cpu); LDA(cpu); break;
-		case 0xA5: RdZp(cpu);  LDA(cpu); break;
-		case 0xB5: RdZpX(cpu); LDA(cpu); break;
-		case 0xAD: RdAbs(cpu); LDA(cpu); break;
-		case 0xBD: RdAbsX(cpu);LDA(cpu); break;
-		case 0xB9: RdAbsY(cpu);LDA(cpu); break;
-		case 0xA1: RdIndX(cpu);LDA(cpu); break;
-		case 0xB1: RdIndY(cpu);LDA(cpu); break;
+		case 0xA9: LDA(cpu, READ_IMM_8(cpu)); break;
+		//case 0xA5: RdZp(cpu);  LDA(cpu); break;
+		//case 0xB5: RdZpX(cpu); LDA(cpu); break;
+		case 0xAD: LDA(cpu, READ_ABS(cpu)); break;
+		case 0xBD: LDA(cpu, READ_ABS_X(cpu)); break;
+		//case 0xB9: RdAbsY(cpu);LDA(cpu); break;
+		//case 0xA1: RdIndX(cpu);LDA(cpu); break;
+		//case 0xB1: RdIndY(cpu);LDA(cpu); break;
 
 			//LDX
-		case 0xA2: RdImd(cpu); LDX(cpu); break;
-		case 0xA6: RdZp(cpu);  LDX(cpu); break;
-		case 0xB6: RdZpY(cpu); LDX(cpu); break;
-		case 0xAE: RdAbs(cpu); LDX(cpu); break;
-		case 0xBE: RdAbsY(cpu);LDX(cpu); break;
+		case 0xA2: LDX(cpu, READ_IMM_8(cpu)); break;
+		//case 0xA6: RdZp(cpu);  LDX(cpu); break;
+		//case 0xB6: RdZpY(cpu); LDX(cpu); break;
+		//case 0xAE: RdAbs(cpu); LDX(cpu); break;
+		//case 0xBE: RdAbsY(cpu);LDX(cpu); break;
 
 			//LDY
-		case 0xA0: RdImd(cpu); LDY(cpu); break;
-		case 0xA4: RdZp(cpu);  LDY(cpu); break;
-		case 0xB4: RdZpX(cpu); LDY(cpu); break;
-		case 0xAC: RdAbs(cpu); LDY(cpu); break;
-		case 0xBC: RdAbsX(cpu);LDY(cpu); break;
+		case 0xA0: LDY(cpu, READ_IMM_8(cpu)); break;
+		//case 0xA4: RdZp(cpu);  LDY(cpu); break;
+		//case 0xB4: RdZpX(cpu); LDY(cpu); break;
+		//case 0xAC: RdAbs(cpu); LDY(cpu); break;
+		//case 0xBC: RdAbsX(cpu);LDY(cpu); break;
 
 			//LSR
-		case 0x4A: RdAcc(cpu);  LSR(cpu); WrAcc(cpu); break;
-		case 0x46: RdZp(cpu);   LSR(cpu); MZp(cpu); cycles +=2;   break;
-		case 0x56: RdZpX(cpu);  LSR(cpu); MZpX(cpu); cycles +=2;   break;
-		case 0x4E: SAbs(cpu);   LSR(cpu); MAbs(cpu);  cycles +=2;   break;
-		case 0x5E: RdAbsX(cpu); LSR(cpu); MAbsX(cpu); cycles +=2;   break;
+		//case 0x4A: RdAcc(cpu);  LSR(cpu); WrAcc(cpu); break;
+		//case 0x46: RdZp(cpu);   LSR(cpu); MZp(cpu); cycles +=2;   break;
+		//case 0x56: RdZpX(cpu);  LSR(cpu); MZpX(cpu); cycles +=2;   break;
+		//case 0x4E: SAbs(cpu);   LSR(cpu); MAbs(cpu);  cycles +=2;   break;
+		//case 0x5E: RdAbsX(cpu); LSR(cpu); MAbsX(cpu); cycles +=2;   break;
 
 
 			//NOP
@@ -824,93 +767,95 @@ int mos6502_doop(mos6502 *cpu) {
 
 
 				//ORA
-		case 0x09: RdImd(cpu);  ORA(cpu); break;
-		case 0x05: RdZp(cpu);   ORA(cpu); break;
-		case 0x15: RdZpX(cpu);  ORA(cpu); break;
-		case 0x0D: RdAbs(cpu);  ORA(cpu); break;
-		case 0x1D: RdAbsX(cpu); ORA(cpu); break;
-		case 0x19: RdAbsY(cpu); ORA(cpu); break;
-		case 0x01: RdIndX(cpu); ORA(cpu); break;
-		case 0x11: RdIndY(cpu); ORA(cpu); break;
+		//case 0x09: RdImd(cpu);  ORA(cpu); break;
+		//case 0x05: RdZp(cpu);   ORA(cpu); break;
+		//case 0x15: RdZpX(cpu);  ORA(cpu); break;
+		//case 0x0D: RdAbs(cpu);  ORA(cpu); break;
+		//case 0x1D: RdAbsX(cpu); ORA(cpu); break;
+		//case 0x19: RdAbsY(cpu); ORA(cpu); break;
+		//case 0x01: RdIndX(cpu); ORA(cpu); break;
+		//case 0x11: RdIndY(cpu); ORA(cpu); break;
 
 			//PHA
-		case 0x48: PHA(cpu); break;
+		//case 0x48: PHA(cpu); break;
 
 			//PHP
-		case 0x08: PHP(cpu); break;
+		//case 0x08: PHP(cpu); break;
 
 			//PLA
-		case 0x68: PLA(cpu); break;
+		//case 0x68: PLA(cpu); break;
 
 			//PLP
-		case 0x28: PLP(cpu); break;
+		//case 0x28: PLP(cpu); break;
 
 			//ROL
-		case 0x2A: RdAcc(cpu);  ROL(cpu); WrAcc(cpu); break;
-		case 0x26: RdZp(cpu);   ROL(cpu); MZp(cpu);   cycles +=2; break;
-		case 0x36: RdZpX(cpu);  ROL(cpu); MZpX(cpu);  cycles +=2; break;
-		case 0x2E: SAbs(cpu);   ROL(cpu); MAbs(cpu);  cycles +=2; break;
-		case 0x3E: RdAbsX(cpu); ROL(cpu); MAbsX(cpu); break;
+		//case 0x2A: RdAcc(cpu);  ROL(cpu); WrAcc(cpu); break;
+		//case 0x26: RdZp(cpu);   ROL(cpu); MZp(cpu);   cycles +=2; break;
+		//case 0x36: RdZpX(cpu);  ROL(cpu); MZpX(cpu);  cycles +=2; break;
+		//case 0x2E: SAbs(cpu);   ROL(cpu); MAbs(cpu);  cycles +=2; break;
+		//case 0x3E: RdAbsX(cpu); ROL(cpu); MAbsX(cpu); break;
 
 			//ROR
-		case 0x6A: RdAcc(cpu);  ROR(cpu); WrAcc(cpu); break;
-		case 0x66: RdZp(cpu);   ROR(cpu); MZp(cpu);   cycles +=2; break;
-		case 0x76: RdZpX(cpu);  ROR(cpu); MZpX(cpu);  cycles +=2; break;
-		case 0x6E: SAbs(cpu);   ROR(cpu); MAbs(cpu);  cycles +=2; break;
-		case 0x7E: RdAbsX(cpu); ROR(cpu); MAbsX(cpu); break;
+		//case 0x6A: RdAcc(cpu);  ROR(cpu); WrAcc(cpu); break;
+		//case 0x66: RdZp(cpu);   ROR(cpu); MZp(cpu);   cycles +=2; break;
+		//case 0x76: RdZpX(cpu);  ROR(cpu); MZpX(cpu);  cycles +=2; break;
+		//case 0x6E: SAbs(cpu);   ROR(cpu); MAbs(cpu);  cycles +=2; break;
+		//case 0x7E: RdAbsX(cpu); ROR(cpu); MAbsX(cpu); break;
 
 			//RTI
-		case 0x40: RTI(cpu); break;
+		//case 0x40: RTI(cpu); break;
 
 			//RTS
-		case 0x60: RTS(cpu); break;
+		//case 0x60: RTS(cpu); break;
 
 			//SBC
-		case 0xE9: RdImd(cpu);  SBC(cpu); break;
-		case 0xe5: RdZp(cpu);   SBC(cpu); break;
-		case 0xF5: RdZpX(cpu);  SBC(cpu); break;
-		case 0xED: RdAbs(cpu);  SBC(cpu); break;
-		case 0xFD: RdAbsX(cpu); SBC(cpu); break;
-		case 0xF9: RdAbsY(cpu); SBC(cpu); break;
-		case 0xE1: RdIndX(cpu); SBC(cpu); break;
-		case 0xF1: RdIndY(cpu); SBC(cpu); break;
+		//case 0xE9: RdImd(cpu);  SBC(cpu); break;
+		//case 0xe5: RdZp(cpu);   SBC(cpu); break;
+		//case 0xF5: RdZpX(cpu);  SBC(cpu); break;
+		//case 0xED: RdAbs(cpu);  SBC(cpu); break;
+		//case 0xFD: RdAbsX(cpu); SBC(cpu); break;
+		//case 0xF9: RdAbsY(cpu); SBC(cpu); break;
+		//case 0xE1: RdIndX(cpu); SBC(cpu); break;
+		//case 0xF1: RdIndY(cpu); SBC(cpu); break;
 
 			//STA
-		case 0x85: RdZp(cpu);   STA(cpu); MZp(cpu);   break;
-		case 0x95: RdZpX(cpu);  STA(cpu); MZpX(cpu);  break;
-		case 0x8D: SAbs(cpu);   STA(cpu); MAbs(cpu);  break;
-		case 0x9D: RdAbsX(cpu); STA(cpu); MAbsX(cpu); cycles++; break;
-		case 0x99: RdAbsY(cpu); STA(cpu); MAbsY(cpu); cycles++; break;
-		case 0x81: RdIndX(cpu); STA(cpu); MIndX(cpu); break;
-		case 0x91: RdIndY(cpu); STA(cpu); MIndY(cpu); cycles++; break;
+		//case 0x85: RdZp(cpu);   STA(cpu); MZp(cpu);   break;
+		//case 0x95: RdZpX(cpu);  STA(cpu); MZpX(cpu);  break;
+		//case 0x8D: SAbs(cpu);   STA(cpu); MAbs(cpu);  break;
+		case 0x8D: WRITE8(cpu, READ_IMM_16(cpu), cpu->a); break;
+		//case 0x8D: SAbs(cpu);   STA(cpu); MAbs(cpu);  break;
+		//case 0x9D: RdAbsX(cpu); STA(cpu); MAbsX(cpu); cycles++; break;
+		//case 0x99: RdAbsY(cpu); STA(cpu); MAbsY(cpu); cycles++; break;
+		//case 0x81: RdIndX(cpu); STA(cpu); MIndX(cpu); break;
+		//case 0x91: RdIndY(cpu); STA(cpu); MIndY(cpu); cycles++; break;
 
 			//STX
-		case 0x86: RdZp(cpu);  STX(cpu); MZp(cpu);  break;
-		case 0x96: RdZpY(cpu); STX(cpu); MZpY(cpu); break;
-		case 0x8E: SAbs(cpu);  STX(cpu); MAbs(cpu); break;
+		//case 0x86: RdZp(cpu);  STX(cpu); MZp(cpu);  break;
+		//case 0x96: RdZpY(cpu); STX(cpu); MZpY(cpu); break;
+		//case 0x8E: SAbs(cpu);  STX(cpu); MAbs(cpu); break;
 
 			//STY
-		case 0x84: RdZp(cpu);  STY(cpu); MZp(cpu);  break;
-		case 0x94: RdZpX(cpu); STY(cpu); MZpX(cpu); break;
-		case 0x8C: SAbs(cpu);  STY(cpu); MAbs(cpu); break;
+		//case 0x84: RdZp(cpu);  STY(cpu); MZp(cpu);  break;
+		//case 0x94: RdZpX(cpu); STY(cpu); MZpX(cpu); break;
+		//case 0x8C: SAbs(cpu);  STY(cpu); MAbs(cpu); break;
 
 			//TAX
-		case 0xAA: TAX(cpu); break;
+		case 0xAA: cpu->x = cpu->a; CHKNEGZERO(cpu, cpu->x); break;
 
 			//TAY
-		case 0xA8: TAY(cpu); break;
+		case 0xA8: cpu->y = cpu->a; CHKNEGZERO(cpu, cpu->y); break;
 
 			//TSX
-		case 0xBA: TSX(cpu); break;
+		case 0xBA: cpu->x = cpu->sp; CHKNEGZERO(cpu, cpu->x); break;
 
 			//TXA
-		case 0x8A: TXA(cpu); break;
+		case 0x8A: cpu->a = cpu->x; CHKNEGZERO(cpu, cpu->a); break;
 
 			//TXS
-		case 0x9A: TXS(cpu); break;
+		case 0x9A: cpu->sp = cpu->x; break;
 
 			//TYA
-		case 0x98: TYA(cpu); break;
+		case 0x98: cpu->a = cpu->y; CHKNEGZERO(cpu, cpu->a); break;
 
 		default:
 			printf("%.2X \tUnknown Opcode!\n", op);
@@ -924,11 +869,10 @@ int mos6502_doop(mos6502 *cpu) {
 	return cycles;
 }
 
-#include "b6502_ops.h"
 int mos6502_logger(mos6502 *cpu) {
 	int ret = 0;
 	static int lcycles = 0;
-	fprintf(stderr, "%.4X  ", cpu->pc);
+	fprintf(stderr, "$%.4X:  ", cpu->pc);
 	uint8_t opcode = READ8(cpu, cpu->pc);
 	struct op *op = &ops[opcode];
 
