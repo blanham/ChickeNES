@@ -17,6 +17,8 @@ struct _mos6502_cpu {
 	uint16_t pc;
 	uint8_t flags;//Might decompose this into bools
 
+	uint8_t irq;
+
 	uint8_t *stack;
 	uint8_t *zero_page;
 	uint8_t *ram;
@@ -61,6 +63,12 @@ typedef struct _mos6502_cpu mos6502;
 
 mos6502 *mos6502_alloc();
 void mos6502_reset(mos6502 *cpu);
-int mos6502_doop(mos6502 *cpu);
+int mos6502_exec(mos6502 *cpu);
 int mos6502_logger(mos6502 *cpu);
+
+#define MOS6502_NMI 0x01
+#define MOS6502_IRQ 0x02
+#define MOS6502_BRK 0x04
+#define MOS6502_RST 0x08
+
 #endif

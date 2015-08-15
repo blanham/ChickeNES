@@ -51,35 +51,14 @@ void nmi(mos6502 *cpu)
 	RAM[0x0100+cpu->sp--] = (uint8_t)(cpu->pc & 0xff);
 	RAM[0x0100+cpu->sp--] = cpu->flags;
 	*/
-	cpu->pc = RAM[0xfffa] + (RAM[0xfffb]<<8);
-	RAM[0x2000] |= 0x80;
+	cpu->pc = READ8(cpu, 0xfffa) + (READ8(cpu, 0xfffb)<<8);
+	//RAM[0x2000] |= 0x80;
 }
 
 void mos6502_reset(mos6502 *cpu)
 {
 	cpu->pc = cpu->read(cpu->aux, 0xFFFC);
 	cpu->pc |= cpu->read(cpu->aux, 0xFFFD) << 8;
-}
-
-void initCPU(void)
-{
-	//read sarting vector from 0x7ffd
-//	cpu->pc = RAM[0xfffc] + (RAM[0xfffd]<<8);
-//	printf("Starting execution at: %.4x\n", cpu->pc);
-	//set CPU flags and registers clear
-
-//	A=X=Y=P=0;
-//	cpu->flags |= 0x4;
-}
-
-
-//would probably be better as a macro
-void chknegzero(mos6502 *cpu, uint8_t chk) {
-	if (chk & 0x80) cpu->flags |= 0x80;
-	else cpu->flags &= 0x7f;
-
-	if (chk == 0) cpu->flags |= 0x02;
-	else cpu->flags &= 0xfd;
 }
 
 void pushstack(mos6502 *cpu) {
@@ -90,487 +69,19 @@ void pushstack(mos6502 *cpu) {
 	RAM[0x0100+cpu->sp] = cpu->flags;
 	cpu->sp--;
 }
-
-//Memory Read Functions
-void RdImd(mos6502 *cpu) {
-	val = RAM[cpu->pc+1];
-	cycles = 2;
-	cpu->pc++;
-}
-
-void RdAcc(mos6502 *cpu) {
-	val = cpu->a;
-	cycles = 2;
-}
-
-void RdZp(mos6502 *cpu) {
-	savepc = RAM[cpu->pc+1];
-	val = RAM[savepc];
-	cycles = 3;
-	cpu->pc++;
-}
-
-void RdZpX(mos6502 *cpu) {
-	savepc = RAM[cpu->pc+1] + cpu->x;
-	savepc &= 0x00ff;
-	val = RAM[savepc];
-	cpu->pc++;
-	cycles = 4;
-}
-
-void RdZpY(mos6502 *cpu) {
-	savepc = RAM[cpu->pc+1] + cpu->y;
-	savepc &= 0x00ff;
-	val = RAM[savepc];
-	cpu->pc++;
-	cycles = 4;
-}
-
-void RdAbs(mos6502 *cpu) {
-	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc+1+1]<<8);
-	val = ReadRAM(savepc);
-	cpu->pc += 2;
-	cycles = 4;
-}
-
-void RdAbsX(mos6502 *cpu) {
-	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc+1+1]<<8);
-	cpu->pc += 2;
-	cycles = 4;
-	if ((savepc>>8) != ((savepc + cpu->x)>>8)) {
-		cycles++;
-	}
-	savepc += cpu->x;
-	val = ReadRAM(savepc);
-}
-
-void RdAbsY(mos6502 *cpu) {
-	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc+1+1]<<8);
-	cpu->pc += 2;
-	cycles = 4;
-	if ((savepc>>8) != ((savepc + cpu->y)>>8))
-		cycles++;
-	savepc +=cpu->y;
-	val = ReadRAM(savepc);
-}
-
-void RdInd(mos6502 *cpu) {
-
-	/*  savepc = RAM[cpu->pc+1] + (RAM[cpu->pc+2] << 8);
-
-		helper = RAM[savepc];
-
-		if (RAM[cpu->pc+1]==0xFF){
-		savepc -= 0xFF;
-		helper = helper + (RAM[savepc+1] << 8);
-		}
-		else {helper = helper + (RAM[savepc+1] << 8); }
-		*/
-	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc+2] << 8);
-	supersavepc = RAM[savepc];
-	if(RAM[cpu->pc+1]==0xFF){
-		savepc &= 0xFF00;
-		savepc -= 1;
-	}
-	supersavepc |= (RAM[savepc +1] << 8);
-
-	savepc = supersavepc;
-
-	cycles = 5;
-}
-
-void RdIndX(mos6502 *cpu) {
-	val = RAM[cpu->pc+1] + cpu->x;
-
-	savepc = RAM[val];
-	savepc |= (RAM[++val] << 8);
-
-	val = RAM[savepc];
-	cpu->pc++;
-	cycles = 6;
-}
-
-void RdIndY(mos6502 *cpu) {
-	cycles = 5;
-	val = RAM[cpu->pc+1];
-	savepc = RAM[val];
-
-	savepc |= (RAM[++val] << 8);
-	if ((savepc & 0xFF00) != ((savepc + cpu->y) & 0xFF00)) {
-		cycles++;
-	}
-	savepc +=cpu->y;
-
-	val = RAM[savepc];
-	cpu->pc++;
-}
-
-//Memory Write Functions, needs cycles added
-
-void WrAcc(mos6502 *cpu) {
-	cpu->a=val;
-}
-
-void WrZp(mos6502 *cpu) {
-	RAM[savepc] = val;
-	cpu->pc++;
-}
-
-void WrZpX(mos6502 *cpu) {
-	RAM[savepc] = val;
-	cpu->pc++;
-}
-
-void WrZpY(mos6502 *cpu) {
-	RAM[savepc] = val;
-	cpu->pc++;
-}
-
-void WrAbs(mos6502 *cpu) {
-	WriteRAM(savepc, val);
-	cpu->pc++;cpu->pc++;
-}
-
-void WrAbsX(mos6502 *cpu) {
-	WriteRAM(savepc, val);
-	cpu->pc++;cpu->pc++;
-}
-
-void WrAbsY(mos6502 *cpu) {
-	WriteRAM(savepc, val);
-	cpu->pc++;cpu->pc++;
-}
-
-void WrIndX(mos6502 *cpu) {
-	WriteRAM(savepc, val);
-	cpu->pc++;
-}
-
-void WrIndY(mos6502 *cpu) {
-	WriteRAM(savepc, val);
-	cpu->pc++;
-}
-
-void SAbs(mos6502 *cpu) {
-	cycles = 4;
-	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc+1+1]<<8);
-	val = RAM[savepc];
-	cpu->pc++;cpu->pc++;
-}
-
-void SAbsX(mos6502 *cpu){
-	cycles = 4;
-	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc+1+1]<<8) + cpu->x;
-	cpu->pc++;cpu->pc++;
-}
-
-void SAbsY(mos6502 *cpu){
-	cycles = 4;
-	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc+1+1]<<8) + cpu->y;
-	cpu->pc++;cpu->pc++;
-}
-
-//Memory Modify Functions, needs cycles added
-void MAcc(mos6502 *cpu) {
-	cpu->a = val;
-}
-
-void MZp(mos6502 *cpu) {
-	RAM[savepc] = val;
-}
-
-void MZpX(mos6502 *cpu) {
-	RAM[savepc] = val;
-}
-
-void MZpY(mos6502 *cpu) {
-	RAM[savepc] = val;
-}
-
-void MAbs(mos6502 *cpu) {
-	WriteRAM(savepc, val);
-}
-
-void MAbsX(mos6502 *cpu) {
-	if ((savepc>>8) != ((savepc - cpu->x)>>8)) {
-		cycles--;
-	}
-	WriteRAM(savepc, val);
-}
-
-void MAbsY(mos6502 *cpu) {
-	WriteRAM(savepc, val);
-}
-
-void MIndX(mos6502 *cpu) {
-	WriteRAM(savepc, val);
-}
-
-void MIndY(mos6502 *cpu) {
-	WriteRAM(savepc, val);
-}
-
 //Operations
-
-//ADC
-void ADC(mos6502 *cpu) {
-	uint16_t sum = cpu->a + val + (cpu->flags & FLAG_CARRY);
-
-	cpu->flags &= ~FLAG_OVER;
-	if ((cpu->a ^ sum) & (val ^ sum) & 0x80) {
-		cpu->flags |= FLAG_OVER;
-	}
-
-	cpu->flags &= ~FLAG_CARRY;
-	if (sum & 0x100) {
-		cpu->flags |= FLAG_CARRY;
-	}
-
-	if (cpu->flags & FLAG_DEC) {
-		//TODO: Implement Decimal mode
-		//fprintf(stderr, "Decimal mode not supported\n");
-		//abort();
-	}
-	cpu->a = sum & 0xFF;
-	chknegzero(cpu, cpu->a);
-}
-
-////AND
-//void AND(mos6502 *cpu) {
-//	cpu->a &= val;
-//	chknegzero(cpu, cpu->a);
-//}
-
-//ASL
-void ASL(mos6502 *cpu) {
-	cpu->flags = (cpu->flags & 0xfe) | ((val >>7) & 0x01);
-	val = val << 1;
-	chknegzero(cpu, val);
-}
-
-//BIT
-void BIT(mos6502 *cpu) {
-	if (val & cpu->a) cpu->flags &= 0xfd;
-	else cpu->flags |= 0x02;
-
-	cpu->flags = (cpu->flags & 0x3f) | (val & 0xc0);
-
-}
 
 void mos6502_branch(mos6502 *cpu, enum mos6502_flags flag, bool condition) {
 	cycles = 2;
 	if (!(cpu->flags & flag) ^ condition) {
 		cycles++;
 		uint8_t page = (cpu->pc >> 8) & 0xFF;
-		cpu->pc += (signed)cpu->ram[cpu->pc+1];
+		cpu->pc = cpu->pc + (int8_t)READ8(cpu, cpu->pc+1);
 		if (page != ((cpu->pc >> 8) & 0xFF)) {
 			//cycles++;
 		}
 	}
 	cpu->pc++;
-}
-
-//CMP
-void CMP(mos6502 *cpu) {
-	if (cpu->a == val) cpu->flags |= 0x02;
-	else cpu->flags &= 0xfd;
-
-	if (cpu->a >= val) cpu->flags |= 0x01;
-	else cpu->flags &= 0xfe;
-
-	if ((cpu->a - (signed char)val) & 0x80) cpu->flags |= 0x80;
-	else cpu->flags &= 0x7f;
-}
-
-//CPX
-void CPX(mos6502 *cpu) {
-	if (cpu->x == val) cpu->flags |= 0x02;
-	else cpu->flags &= 0xfd;
-
-	if (cpu->x >= val) cpu->flags |= 0x01;
-	else cpu->flags &= 0xfe;
-
-	if ((cpu->x - (signed char)val) & 0x80) cpu->flags |= 0x80;
-	else cpu->flags &= 0x7f;
-}
-
-//CPY
-void CPY(mos6502 *cpu) {
-	//we use the helper variable
-	helper = cpu->y - val;
-	//if Y = cpu->pc+1, we set zero
-	if (helper == 0) cpu->flags |= 0x02;
-	else cpu->flags &= 0xfd;
-	if (cpu->y+0x100 - val>0xff) cpu->flags |= 0x01;
-	else cpu->flags &= 0xfe;
-	//if Y < cpu->pc+1, set negative bit
-	if (helper & 0x80) cpu->flags |= 0x80;
-	else cpu->flags &= 0x7f;
-}
-
-//DEC
-void DEC(mos6502 *cpu) {
-	val--;
-	chknegzero(cpu, val);
-}
-
-//DEX
-void DEX(mos6502 *cpu) {
-	cpu->x--;
-	chknegzero(cpu, cpu->x);
-	cycles=2;
-}
-
-//DEY
-void DEY(mos6502 *cpu) {
-	cpu->y--;
-	chknegzero(cpu, cpu->y);
-	cycles=2;
-}
-
-//EOR
-void EOR(mos6502 *cpu) {
-	cpu->a ^= val;
-	chknegzero(cpu, cpu->a);
-}
-
-//INC
-void INC(mos6502 *cpu) {
-	val++;
-	chknegzero(cpu, val);
-}
-
-//INX
-void INX(mos6502 *cpu) {
-	cpu->x++;
-	chknegzero(cpu, cpu->x);
-	cycles=2;
-}
-
-//INY
-void INY(mos6502 *cpu) {
-	cpu->y++;
-	chknegzero(cpu, cpu->y);
-	cycles=2;
-}
-
-//JMP
-void JMP(mos6502 *cpu) {
-
-	cpu->pc = savepc;
-	cpu->pc--;
-	cycles = 3;
-}
-
-//JSR
-//void JSR(mos6502 *cpu) {
-//	savepc = cpu->pc + 0x2;
-//	RAM[0x0100+cpu->sp--]= ((savepc >> 8));
-//	RAM[0x0100+cpu->sp--]= ((savepc & 0xff));
-//
-//
-//	savepc = RAM[cpu->pc+1] + (RAM[cpu->pc + 2] << 8);
-//	savepc = savepc - 0x1;
-//	cpu->pc = savepc;
-//	cycles = 6;
-//}
-
-
-//LSR
-void LSR(mos6502 *cpu) {
-	cpu->flags = (cpu->flags & 0xfe) | (val & 0x01);
-	val = val >> 1;
-	chknegzero(cpu, val);
-}
-
-//ORA
-void ORA(mos6502 *cpu) {
-	cpu->a |= val;
-	chknegzero(cpu, cpu->a);
-}
-
-//PHA
-void PHA(mos6502 *cpu) {
-	RAM[0x0100+cpu->sp--] = cpu->a;
-	cycles = 3;
-}
-
-//PHP
-void PHP(mos6502 *cpu) {
-	val=cpu->flags;
-	val |= 0x10;
-	val |= 0x20;
-	RAM[0x0100+cpu->sp--]=val;
-	cycles = 3;
-}
-
-//PLA
-void PLA(mos6502 *cpu) {
-	cpu->a = RAM[0x0100 + ++cpu->sp];
-	chknegzero(cpu, cpu->a);
-	cycles = 4;
-}
-
-//PLP
-void PLP(mos6502 *cpu) {
-	cpu->flags = (POP(cpu) & ~FLAG_BRK) | FLAG_PUSH;
-	cycles = 4;
-}
-
-//ROL
-void ROL(mos6502 *cpu) {
-	helper = (cpu->flags & 0x01);
-	cpu->flags = (cpu->flags & 0xfe) | ((val >>7) & 0x01);
-	val = val << 1;
-	val |= helper;
-	chknegzero(cpu, val);
-}
-
-//ROR
-void ROR(mos6502 *cpu) {
-	saveP = (cpu->flags & 0x01);
-	cpu->flags = (cpu->flags & 0xfe) | (val & 0x01);
-	val = val >> 1;
-	if (saveP) val |= 0x80;
-	chknegzero(cpu, val);
-}
-
-//RTI
-void RTI(mos6502 *cpu) {
-	cycles = 6;
-	cpu->flags = RAM[0x0100 + ++cpu->sp] | 0x20;
-	savepc = RAM[0x0100 + ++cpu->sp];
-	savepc |= (RAM[0x0100 + ++cpu->sp] << 8 );
-	cpu->pc = savepc - 1;
-}
-
-//RTS
-void RTS(mos6502 *cpu) {
-	savepc = RAM[0x0100 + ++cpu->sp] ;
-	savepc = savepc + (((RAM[0x0100 + ++cpu->sp])<< 8 ));
-	cpu->pc = savepc;
-	cycles = 6;
-}
-
-//SBC
-void SBC(mos6502 *cpu) {
-	val ^= 0xFF;
-	ADC(cpu);
-}
-
-//STA
-//void STA(mos6502 *cpu) {
-//	val = cpu->a;
-//}
-
-//STX
-void STX(mos6502 *cpu) {
-	val = cpu->x;
-}
-
-//STY
-void STY(mos6502 *cpu) {
-	val = cpu->y;
 }
 
 void BRK(mos6502 *cpu) {
@@ -586,11 +97,34 @@ void BRK(mos6502 *cpu) {
 }
 
 #include "b6502_ops.h"
-int mos6502_doop(mos6502 *cpu) {
+int mos6502_exec(mos6502 *cpu) {
 	cycles = 0;
-	uint8_t op = READ8(cpu, cpu->pc);
 
-	switch (op) {
+	if ((cpu->flags & FLAG_INT) && cpu->irq) {
+		uint8_t irq = __builtin_ctz(cpu->irq);
+		PUSH_PC(cpu);
+		PUSH(cpu, cpu->flags);
+		switch (1 << irq) {
+			case MOS6502_IRQ:
+			case MOS6502_BRK:
+				cpu->pc = READ8(cpu, 0xFFFE) + (READ8(cpu, 0xFFFF)<<8);
+				break;
+			case MOS6502_NMI:
+				cpu->pc = READ8(cpu, 0xFFFA) + (READ8(cpu, 0xFFFB)<<8);
+				break;
+			case MOS6502_RST:
+				cpu->pc = READ8(cpu, 0xFFFC) + (READ8(cpu, 0xFFFD)<<8);
+				break;
+		}
+
+		cpu->irq = 0;
+	}
+
+
+	uint8_t opcode = READ8(cpu, cpu->pc);
+	struct op *op = &ops[opcode];
+
+	switch (opcode) {
 			//Flags
 		case 0x18: FLAG_CLEAR(cpu, FLAG_CARRY); cycles = 2; break;
 		case 0x58: FLAG_CLEAR(cpu, FLAG_INT); cycles = 2; break;
@@ -601,32 +135,51 @@ int mos6502_doop(mos6502 *cpu) {
 		case 0xF8: FLAG_SET(cpu, FLAG_DEC); cycles = 2;break;
 
 			//ADC
-		//case 0x69: RdImd(cpu);  ADC(cpu); break;
-		//case 0x65: RdZp(cpu);   ADC(cpu); break;
-		//case 0x75: RdZpX(cpu);  ADC(cpu); break;
-		//case 0x6D: RdAbs(cpu);  ADC(cpu); break;
-		//case 0x7D: RdAbsX(cpu); ADC(cpu); break;
-		//case 0x79: RdAbsY(cpu); ADC(cpu); break;
-		//case 0x61: RdIndX(cpu); ADC(cpu); break;
-		//case 0x71: RdIndY(cpu); ADC(cpu); break;
+		case 0x69: ADC(cpu, READ_IMM_8(cpu)); break;
+		case 0x65: ADC(cpu, READ_ZP(cpu));    break;
+		case 0x75: ADC(cpu, READ_ZP_X(cpu));  break;
+		case 0x6D: ADC(cpu, READ_ABS(cpu));   break;
+		case 0x7D: ADC(cpu, READ_ABS_X(cpu)); break;
+		case 0x79: ADC(cpu, READ_ABS_Y(cpu)); break;
+		case 0x61: ADC(cpu, READ_IND_X(cpu)); break;
+		case 0x71: ADC(cpu, READ_IND_Y(cpu)); break;
 
 			//AND
 		case 0x29: AND(cpu, READ_IMM_8(cpu)); break;
-		//case 0x29: RdImd(cpu);  AND(cpu); break;
-		//case 0x25: RdZp(cpu);   AND(cpu); break;
-		//case 0x35: RdZpX(cpu);  AND(cpu); break;
-		//case 0x2D: RdAbs(cpu);  AND(cpu); break;
-		//case 0x3D: RdAbsX(cpu); AND(cpu); break;
-		//case 0x39: RdAbsY(cpu); AND(cpu); break;
-		//case 0x21: RdIndX(cpu); AND(cpu); break;
-		//case 0x31: RdIndY(cpu); AND(cpu); break;
+		case 0x25: AND(cpu, READ_ZP(cpu));    break;
+		case 0x35: AND(cpu, READ_ZP_X(cpu));  break;
+		case 0x2D: AND(cpu, READ_ABS(cpu));   break;
+		case 0x3D: AND(cpu, READ_ABS_X(cpu)); break;
+		case 0x39: AND(cpu, READ_ABS_Y(cpu)); break;
+		case 0x21: AND(cpu, READ_IND_X(cpu)); break;
+		case 0x31: AND(cpu, READ_IND_Y(cpu)); break;
 
 			//ASL
-		//case 0x0A: RdAcc(cpu); ASL(cpu); MAcc(cpu);  break;
-		//case 0x06: RdZp(cpu);  ASL(cpu); MZp(cpu);  cycles+=2; break;
-		//case 0x16: RdZpX(cpu); ASL(cpu); MZpX(cpu); cycles+=2; break;
-		//case 0x0E: SAbs(cpu);  ASL(cpu); MAbs(cpu); cycles+=2;  break;
-		//case 0x1E: RdAbsX(cpu);ASL(cpu); MAbsX(cpu); break;
+		case 0x0A: cpu->a = ASL(cpu, cpu->a); break;
+		case 0x06: {
+					   uint16_t addr = READ_IMM_8(cpu);
+					   uint8_t val = ASL(cpu, READ8(cpu, addr));
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0x16: {
+					   uint16_t addr = ADDR_ZP_X(cpu);
+					   uint8_t val = ASL(cpu, READ8(cpu, addr));
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0x0E: {
+					   uint16_t addr = ADDR_ABS(cpu);
+					   uint8_t val = ASL(cpu, READ8(cpu, addr));
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0x1E: {
+					   uint16_t addr = ADDR_ABS_X(cpu);
+					   uint8_t val = ASL(cpu, READ8(cpu, addr));
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
 
 			//Branches
 		case 0x90: mos6502_branch(cpu, FLAG_CARRY, false);	break; //BCC
@@ -639,103 +192,171 @@ int mos6502_doop(mos6502 *cpu) {
 		case 0x70: mos6502_branch(cpu, FLAG_OVER,  true);	break;
 
 			//BIT
-		//case 0x24: RdZp(cpu);  BIT(cpu); break;
-		//case 0x2C: RdAbs(cpu); BIT(cpu); break;
+		case 0x24: BIT(cpu, READ_ZP(cpu)); break;
+		case 0x2C: BIT(cpu, READ_ABS(cpu)); break;
 
 		//case 0x00: BRK(cpu); break;
 
 			//CMP
-		//case 0xC9: RdImd(cpu);  CMP(cpu); break;
-		//case 0xC5: RdZp(cpu);   CMP(cpu); break;
-		//case 0xD5: RdZpX(cpu);  CMP(cpu); break;
-		//case 0xCD: RdAbs(cpu);  CMP(cpu); break;
-		//case 0xDD: RdAbsX(cpu); CMP(cpu); break;
-		//case 0xD9: RdAbsY(cpu); CMP(cpu); break;
-		//case 0xC1: RdIndX(cpu); CMP(cpu); break;
-		//case 0xD1: RdIndY(cpu); CMP(cpu); break;
+		case 0xC9: CMP(cpu, READ_IMM_8(cpu)); break;
+		case 0xC5: CMP(cpu, READ_ZP(cpu));    break;
+		case 0xD5: CMP(cpu, READ_ZP_X(cpu));  break;
+		case 0xCD: CMP(cpu, READ_ABS(cpu));   break;
+		case 0xDD: CMP(cpu, READ_ABS_X(cpu)); break;
+		case 0xD9: CMP(cpu, READ_ABS_Y(cpu)); break;
+		case 0xC1: CMP(cpu, READ_IND_X(cpu)); break;
+		case 0xD1: CMP(cpu, READ_IND_Y(cpu)); break;
 
 			//CPX
-		//case 0xE0: RdImd(cpu); CPX(cpu); break;
-		//case 0xE4: RdZp(cpu);  CPX(cpu); break;
-		//case 0xEC: RdAbs(cpu); CPX(cpu); break;
+		case 0xE0: CPX(cpu, READ_IMM_8(cpu)); break;
+		case 0xE4: CPX(cpu, READ_ZP(cpu)); break;
+		case 0xEC: CPX(cpu, READ_ABS(cpu)); break;
 
 			//CPY
-		//case 0xC0: RdImd(cpu); CPY(cpu); break;
-		//case 0xC4: RdZp(cpu);  CPY(cpu); break;
-		//case 0xCC: RdAbs(cpu); CPY(cpu); break;
+		case 0xC0: CPY(cpu, READ_IMM_8(cpu)); break;
+		case 0xC4: CPY(cpu, READ_ZP(cpu)); break;
+		case 0xCC: CPY(cpu, READ_ABS(cpu)); break;
 
 			//DEC
-		//case 0xC6: RdZp(cpu);  DEC(cpu); MZp(cpu); cycles+=2; break;
-		//case 0xD6: RdZpX(cpu); DEC(cpu); MZpX(cpu); cycles+=2; break;
-		//case 0xCE: SAbs(cpu);  DEC(cpu); MAbs(cpu); cycles+=2; break;
-		//case 0xDE: RdAbsX(cpu);DEC(cpu); MAbsX(cpu); break;
+		case 0xC6: {
+					   uint16_t addr = READ_IMM_8(cpu);
+					   uint8_t val = READ8(cpu, addr) - 1;
+					   CHKNEGZERO(cpu, val);
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0xD6: {
+					   uint16_t addr = ADDR_ZP_X(cpu);
+					   uint8_t val = READ8(cpu, addr) - 1;
+					   CHKNEGZERO(cpu, val);
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0xCE: {
+					   uint16_t addr = ADDR_ABS(cpu);
+					   uint8_t val = READ8(cpu, addr) - 1;
+					   CHKNEGZERO(cpu, val);
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0xDE: {
+					   uint16_t addr = ADDR_ABS_X(cpu);
+					   uint8_t val = READ8(cpu, addr) - 1;
+					   CHKNEGZERO(cpu, val);
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
 
 			//DEX
-		//case 0xCA: DEX(cpu); break;
+		case 0xCA: cpu->x--; CHKNEGZERO(cpu, cpu->x); break;
 
 			//DEY
-		//case 0x88: DEY(cpu); break;
+		case 0x88: cpu->y--; CHKNEGZERO(cpu, cpu->y); break;
 
 			//EOR
-		//case 0x49: RdImd(cpu);  EOR(cpu); break;
-		//case 0x45: RdZp(cpu);   EOR(cpu); break;
-		//case 0x55: RdZpX(cpu);  EOR(cpu); break;
-		//case 0x4D: RdAbs(cpu);  EOR(cpu); break;
-		//case 0x5D: RdAbsX(cpu); EOR(cpu); break;
-		//case 0x59: RdAbsY(cpu); EOR(cpu); break;
-		//case 0x41: RdIndX(cpu); EOR(cpu); break;
-		//case 0x51: RdIndY(cpu); EOR(cpu); break;
+		case 0x49: EOR(cpu, READ_IMM_8(cpu)); break;
+		case 0x45: EOR(cpu, READ_ZP(cpu));    break;
+		case 0x55: EOR(cpu, READ_ZP_X(cpu));  break;
+		case 0x4D: EOR(cpu, READ_ABS(cpu));   break;
+		case 0x5D: EOR(cpu, READ_ABS_X(cpu)); break;
+		case 0x59: EOR(cpu, READ_ABS_Y(cpu)); break;
+		case 0x41: EOR(cpu, READ_IND_X(cpu)); break;
+		case 0x51: EOR(cpu, READ_IND_Y(cpu)); break;
 
 			//INC
-		//case 0xE6: RdZp(cpu);   INC(cpu); MZp(cpu); cycles+=2;  break;
-		//case 0xF6: RdZpX(cpu);  INC(cpu); MZpX(cpu); cycles+=2; break;
-		//case 0xEE: SAbs(cpu);   INC(cpu); MAbs(cpu); cycles+=2; break;
-		//case 0xFE: RdAbsX(cpu); INC(cpu); MAbsX(cpu); break;
+		case 0xE6: {
+					   uint16_t addr = READ_IMM_8(cpu);
+					   uint8_t val = READ8(cpu, addr) + 1;
+					   CHKNEGZERO(cpu, val);
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0xF6: {
+					   uint16_t addr = ADDR_ZP_X(cpu);
+					   uint8_t val = READ8(cpu, addr) + 1;
+					   CHKNEGZERO(cpu, val);
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0xEE: {
+					   uint16_t addr = ADDR_ABS(cpu);
+					   uint8_t val = READ8(cpu, addr) + 1;
+					   CHKNEGZERO(cpu, val);
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0xFE: {
+					   uint16_t addr = ADDR_ABS_X(cpu);
+					   uint8_t val = READ8(cpu, addr) + 1;
+					   CHKNEGZERO(cpu, val);
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
 
 			//INX
-		//case 0xE8: INX(cpu); break;
+		case 0xE8: cpu->x++; CHKNEGZERO(cpu, cpu->x); break;
 
 			//INY
-		//case 0xC8: INY(cpu); break;
+		case 0xC8: cpu->y++; CHKNEGZERO(cpu, cpu->y); break;
 
 			//JMP
 		case 0x4C: cpu->pc = READ_IMM_16(cpu) - 1; break;
 		case 0x6C: cpu->pc = READ_IND(cpu) - 1; break;
 
+
 			//JSR
-		//case 0x20: JSR(cpu); cycles = 6; break;
+		case 0x20: JSR(cpu); cycles = 6; break;
 
 			//LDA
 		case 0xA9: LDA(cpu, READ_IMM_8(cpu)); break;
-		//case 0xA5: RdZp(cpu);  LDA(cpu); break;
-		//case 0xB5: RdZpX(cpu); LDA(cpu); break;
+		case 0xA5: LDA(cpu, READ_ZP(cpu)); break;
+		case 0xB5: LDA(cpu, READ_ZP_X(cpu)); break;
 		case 0xAD: LDA(cpu, READ_ABS(cpu)); break;
 		case 0xBD: LDA(cpu, READ_ABS_X(cpu)); break;
-		//case 0xB9: RdAbsY(cpu);LDA(cpu); break;
-		//case 0xA1: RdIndX(cpu);LDA(cpu); break;
-		//case 0xB1: RdIndY(cpu);LDA(cpu); break;
+		case 0xB9: LDA(cpu, READ_ABS_Y(cpu)); break;
+		case 0xA1: LDA(cpu, READ_IND_X(cpu)); break;
+		case 0xB1: LDA(cpu, READ_IND_Y(cpu)); break;
 
 			//LDX
 		case 0xA2: LDX(cpu, READ_IMM_8(cpu)); break;
-		//case 0xA6: RdZp(cpu);  LDX(cpu); break;
-		//case 0xB6: RdZpY(cpu); LDX(cpu); break;
-		//case 0xAE: RdAbs(cpu); LDX(cpu); break;
-		//case 0xBE: RdAbsY(cpu);LDX(cpu); break;
+		case 0xA6: LDX(cpu, READ_ZP(cpu)); break;
+		case 0xB6: LDX(cpu, READ_ZP_Y(cpu)); break;
+		case 0xAE: LDX(cpu, READ_ABS(cpu)); break;
+		case 0xBE: LDX(cpu, READ_ABS_Y(cpu)); break;
 
 			//LDY
 		case 0xA0: LDY(cpu, READ_IMM_8(cpu)); break;
-		//case 0xA4: RdZp(cpu);  LDY(cpu); break;
-		//case 0xB4: RdZpX(cpu); LDY(cpu); break;
-		//case 0xAC: RdAbs(cpu); LDY(cpu); break;
-		//case 0xBC: RdAbsX(cpu);LDY(cpu); break;
+		case 0xA4: LDY(cpu, READ_ZP(cpu)); break;
+		case 0xB4: LDY(cpu, READ_ZP_X(cpu)); break;
+		case 0xAC: LDY(cpu, READ_ABS(cpu)); break;
+		case 0xBC: LDY(cpu, READ_ABS_X(cpu)); break;
 
 			//LSR
-		//case 0x4A: RdAcc(cpu);  LSR(cpu); WrAcc(cpu); break;
-		//case 0x46: RdZp(cpu);   LSR(cpu); MZp(cpu); cycles +=2;   break;
-		//case 0x56: RdZpX(cpu);  LSR(cpu); MZpX(cpu); cycles +=2;   break;
-		//case 0x4E: SAbs(cpu);   LSR(cpu); MAbs(cpu);  cycles +=2;   break;
-		//case 0x5E: RdAbsX(cpu); LSR(cpu); MAbsX(cpu); cycles +=2;   break;
-
+		case 0x4A: cpu->a = LSR(cpu, cpu->a); break;
+		case 0x46: {
+					   uint16_t addr = READ_IMM_8(cpu);
+					   uint8_t val = LSR(cpu, READ8(cpu, addr));
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0x56: {
+					   uint16_t addr = ADDR_ZP_X(cpu);
+					   uint8_t val = LSR(cpu, READ8(cpu, addr));
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0x4E: {
+					   uint16_t addr = ADDR_ABS(cpu);
+					   uint8_t val = LSR(cpu, READ8(cpu, addr));
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0x5E: {
+					   uint16_t addr = ADDR_ABS_X(cpu);
+					   uint8_t val = LSR(cpu, READ8(cpu, addr));
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
 
 			//NOP
 		case 0xEA:  cycles = 2; break;
@@ -767,77 +388,115 @@ int mos6502_doop(mos6502 *cpu) {
 
 
 				//ORA
-		//case 0x09: RdImd(cpu);  ORA(cpu); break;
-		//case 0x05: RdZp(cpu);   ORA(cpu); break;
-		//case 0x15: RdZpX(cpu);  ORA(cpu); break;
-		//case 0x0D: RdAbs(cpu);  ORA(cpu); break;
-		//case 0x1D: RdAbsX(cpu); ORA(cpu); break;
-		//case 0x19: RdAbsY(cpu); ORA(cpu); break;
-		//case 0x01: RdIndX(cpu); ORA(cpu); break;
-		//case 0x11: RdIndY(cpu); ORA(cpu); break;
+		case 0x09: ORA(cpu, READ_IMM_8(cpu)); break;
+		case 0x05: ORA(cpu, READ_ZP(cpu));    break;
+		case 0x15: ORA(cpu, READ_ZP_X(cpu));  break;
+		case 0x0D: ORA(cpu, READ_ABS(cpu));   break;
+		case 0x1D: ORA(cpu, READ_ABS_X(cpu)); break;
+		case 0x19: ORA(cpu, READ_ABS_Y(cpu)); break;
+		case 0x01: ORA(cpu, READ_IND_X(cpu)); break;
+		case 0x11: ORA(cpu, READ_IND_Y(cpu)); break;
 
 			//PHA
-		//case 0x48: PHA(cpu); break;
+		case 0x48: PUSH(cpu, cpu->a); break;
 
 			//PHP
-		//case 0x08: PHP(cpu); break;
+		case 0x08: PUSH(cpu, cpu->flags | 0x30); break;
 
 			//PLA
-		//case 0x68: PLA(cpu); break;
+		case 0x68: cpu->a = POP(cpu); CHKNEGZERO(cpu, cpu->a); break;
 
 			//PLP
-		//case 0x28: PLP(cpu); break;
+		case 0x28: cpu->flags = (POP(cpu) & ~FLAG_BRK) | FLAG_PUSH;  break;
 
 			//ROL
-		//case 0x2A: RdAcc(cpu);  ROL(cpu); WrAcc(cpu); break;
-		//case 0x26: RdZp(cpu);   ROL(cpu); MZp(cpu);   cycles +=2; break;
-		//case 0x36: RdZpX(cpu);  ROL(cpu); MZpX(cpu);  cycles +=2; break;
-		//case 0x2E: SAbs(cpu);   ROL(cpu); MAbs(cpu);  cycles +=2; break;
-		//case 0x3E: RdAbsX(cpu); ROL(cpu); MAbsX(cpu); break;
+		case 0x2A: cpu->a = ROL(cpu, cpu->a); break;
+		case 0x26: {
+					   uint16_t addr = READ_IMM_8(cpu);
+					   uint8_t val = ROL(cpu, READ8(cpu, addr));
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0x36: {
+					   uint16_t addr = ADDR_ZP_X(cpu);
+					   uint8_t val = ROL(cpu, READ8(cpu, addr));
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0x2E: {
+					   uint16_t addr = ADDR_ABS(cpu);
+					   uint8_t val = ROL(cpu, READ8(cpu, addr));
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0x3E: {
+					   uint16_t addr = ADDR_ABS_X(cpu);
+					   uint8_t val = ROL(cpu, READ8(cpu, addr));
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
 
 			//ROR
-		//case 0x6A: RdAcc(cpu);  ROR(cpu); WrAcc(cpu); break;
-		//case 0x66: RdZp(cpu);   ROR(cpu); MZp(cpu);   cycles +=2; break;
-		//case 0x76: RdZpX(cpu);  ROR(cpu); MZpX(cpu);  cycles +=2; break;
-		//case 0x6E: SAbs(cpu);   ROR(cpu); MAbs(cpu);  cycles +=2; break;
-		//case 0x7E: RdAbsX(cpu); ROR(cpu); MAbsX(cpu); break;
+		case 0x6A: cpu->a = ROR(cpu, cpu->a); break;
+		case 0x66: {
+					   uint16_t addr = READ_IMM_8(cpu);
+					   uint8_t val = ROR(cpu, READ8(cpu, addr));
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0x76: {
+					   uint16_t addr = ADDR_ZP_X(cpu);
+					   uint8_t val = ROR(cpu, READ8(cpu, addr));
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0x6E: {
+					   uint16_t addr = ADDR_ABS(cpu);
+					   uint8_t val = ROR(cpu, READ8(cpu, addr));
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
+		case 0x7E: {
+					   uint16_t addr = ADDR_ABS_X(cpu);
+					   uint8_t val = ROR(cpu, READ8(cpu, addr));
+					   WRITE8(cpu, addr, val);
+					   break;
+				   }
 
 			//RTI
-		//case 0x40: RTI(cpu); break;
+		case 0x40: cpu->flags = POP(cpu) | FLAG_PUSH; cpu->pc = POP_16(cpu) - 1; break;
 
 			//RTS
-		//case 0x60: RTS(cpu); break;
+		case 0x60: cpu->pc = POP_16(cpu); break;
 
 			//SBC
-		//case 0xE9: RdImd(cpu);  SBC(cpu); break;
-		//case 0xe5: RdZp(cpu);   SBC(cpu); break;
-		//case 0xF5: RdZpX(cpu);  SBC(cpu); break;
-		//case 0xED: RdAbs(cpu);  SBC(cpu); break;
-		//case 0xFD: RdAbsX(cpu); SBC(cpu); break;
-		//case 0xF9: RdAbsY(cpu); SBC(cpu); break;
-		//case 0xE1: RdIndX(cpu); SBC(cpu); break;
-		//case 0xF1: RdIndY(cpu); SBC(cpu); break;
+		case 0xE9: SBC(cpu, READ_IMM_8(cpu)); break;
+		case 0xe5: SBC(cpu, READ_ZP(cpu));    break;
+		case 0xF5: SBC(cpu, READ_ZP_X(cpu));  break;
+		case 0xED: SBC(cpu, READ_ABS(cpu));   break;
+		case 0xFD: SBC(cpu, READ_ABS_X(cpu)); break;
+		case 0xF9: SBC(cpu, READ_ABS_Y(cpu)); break;
+		case 0xE1: SBC(cpu, READ_IND_X(cpu)); break;
+		case 0xF1: SBC(cpu, READ_IND_Y(cpu)); break;
 
 			//STA
-		//case 0x85: RdZp(cpu);   STA(cpu); MZp(cpu);   break;
-		//case 0x95: RdZpX(cpu);  STA(cpu); MZpX(cpu);  break;
-		//case 0x8D: SAbs(cpu);   STA(cpu); MAbs(cpu);  break;
+		case 0x85: WRITE_ZP(cpu, cpu->a);  break;
+		case 0x95: WRITE_ZP_X(cpu, cpu->a);  break;
 		case 0x8D: WRITE8(cpu, READ_IMM_16(cpu), cpu->a); break;
-		//case 0x8D: SAbs(cpu);   STA(cpu); MAbs(cpu);  break;
-		//case 0x9D: RdAbsX(cpu); STA(cpu); MAbsX(cpu); cycles++; break;
-		//case 0x99: RdAbsY(cpu); STA(cpu); MAbsY(cpu); cycles++; break;
-		//case 0x81: RdIndX(cpu); STA(cpu); MIndX(cpu); break;
-		//case 0x91: RdIndY(cpu); STA(cpu); MIndY(cpu); cycles++; break;
+		case 0x9D: WRITE8(cpu, ADDR_ABS_X(cpu), cpu->a); break;
+		case 0x99: WRITE8(cpu, ADDR_ABS_Y(cpu), cpu->a); break;
+		case 0x81: WRITE8(cpu, ADDR_IND_X(cpu), cpu->a); break;
+		case 0x91: WRITE8(cpu, ADDR_IND_Y(cpu), cpu->a); break;
 
 			//STX
-		//case 0x86: RdZp(cpu);  STX(cpu); MZp(cpu);  break;
-		//case 0x96: RdZpY(cpu); STX(cpu); MZpY(cpu); break;
-		//case 0x8E: SAbs(cpu);  STX(cpu); MAbs(cpu); break;
+		case 0x86: WRITE_ZP(cpu, cpu->x);  break;
+		case 0x96: WRITE_ZP_Y(cpu, cpu->x);  break;
+		case 0x8E: WRITE_ABS(cpu, cpu->x); break;
 
 			//STY
-		//case 0x84: RdZp(cpu);  STY(cpu); MZp(cpu);  break;
-		//case 0x94: RdZpX(cpu); STY(cpu); MZpX(cpu); break;
-		//case 0x8C: SAbs(cpu);  STY(cpu); MAbs(cpu); break;
+		case 0x84: WRITE_ZP(cpu, cpu->y);  break;
+		case 0x94: WRITE_ZP_X(cpu, cpu->y);  break;
+		case 0x8C: WRITE_ABS(cpu, cpu->y); break;
 
 			//TAX
 		case 0xAA: cpu->x = cpu->a; CHKNEGZERO(cpu, cpu->x); break;
@@ -858,13 +517,13 @@ int mos6502_doop(mos6502 *cpu) {
 		case 0x98: cpu->a = cpu->y; CHKNEGZERO(cpu, cpu->a); break;
 
 		default:
-			printf("%.2X \tUnknown Opcode!\n", op);
-			printf("nestest: %.2X %.2X %.2X %.2X\n", RAM[0], RAM[1], RAM[2], RAM[3]);
+			fprintf(stderr, "%.2X \tUnknown Opcode!\n", opcode);
+			fprintf(stderr, "nestest: %.2X %.2X %.2X %.2X\n", RAM[0], RAM[1], RAM[2], RAM[3]);
 			exit(EXIT_FAILURE);
 	}
 
 	cpu->pc++;
-
+	cycles = op->cycles;
 	cpu->cycles += cycles;
 	return cycles;
 }
@@ -993,13 +652,15 @@ int mos6502_logger(mos6502 *cpu) {
 			fprintf(stderr, "%2i        \t\t\t\t", op->mode);
 	}*/
 
-	fprintf(stderr, "\tA:%.2X X:%.2X Y:%.2X P:%.2X SP:%.2X CYC:%3i ",
-			cpu->a, cpu->x, cpu->y, cpu->flags, cpu->sp, lcycles);
+	fprintf(stderr, "\tA:%.2X X:%.2X Y:%.2X P:%.2X SP:%.2X",
+			cpu->a, cpu->x, cpu->y, cpu->flags, cpu->sp);
+	//fprintf(stderr, "\tA:%.2X X:%.2X Y:%.2X P:%.2X SP:%.2X CYC:%3i ",
+	//		cpu->a, cpu->x, cpu->y, cpu->flags, cpu->sp, lcycles);
 
-	PRINT_MOS6502_FLAGS(cpu);
+	//PRINT_MOS6502_FLAGS(cpu);
 	fprintf(stderr, "\n");
 
-	ret = mos6502_doop(cpu);
+	ret = mos6502_exec(cpu);
 
 	lcycles += ret * 3;
 	if (lcycles >= 341) {

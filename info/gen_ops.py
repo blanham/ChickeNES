@@ -31,7 +31,7 @@ for row in ws.rows[1:]:
     op['value'] = int(row[0].value)
     op['modify'] = int(0 if not row[9].value else 1)
     ops.append(op)
-    
+
 print 'enum mos6502_modes {'''
 c_modes = modes.values()
 c_modes.sort()
@@ -43,9 +43,10 @@ print '''struct op {
 \tint mode;
 \tint bytes;
 \tint modify;
+\tint cycles;
 } ops[] = {'''
 
 for op in ops:
-    print '\t{"%s", MODE_%s, %i, %i}, //%s, %i' % (op['name'], op['mode'], op['bytes'], op['modify'], op['code'], op['value'])
+    print '\t{"%s", MODE_%s, %i, %i, %i}, //%s, %i' % (op['name'], op['mode'], op['bytes'], op['modify'], op['cycles'], op['code'], op['value'])
 
 print '};';
